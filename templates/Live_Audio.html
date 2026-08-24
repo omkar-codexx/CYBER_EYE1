@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYBEREYE — Live Audio Monitor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root {
+            --brand: #2b6cb0;
+            --brand-glow: rgba(43, 108, 176, 0.4);
+            --bg: #050507;
+            --card: #0d0d0f;
+            --border: #1f1f23;
+            --accent: #22d3ee;
+            --danger: #ef4444;
+            --btn-bg: #161618;
+            --silver: #a1a1aa;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 50px;
+            padding: 20px;
+            max-width: 1200px;
+            width: 100%;
+            height: 90vh;
+            align-items: center;
+        }
+
+        /* ── SIDEBAR ── */
+        .controls-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.6rem;
+            letter-spacing: 3px;
+        }
+        .logo .white { background: linear-gradient(#fff, #9ca3af); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .logo .cyan { background: linear-gradient(#3182ce, #2b6cb0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-left: 4px; }
+
+        .section-label {
+            font-size: 9px;
+            color: #52525b;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-family: inherit;
+            font-size: 12px;
+            text-transform: uppercase;
+            position: relative;
+        }
+
+        .btn-start { background: var(--btn-bg); color: #fff; }
+        .btn-start:hover:not(:disabled) { border-color: var(--brand); color: #4299e1; }
+
+        .btn-stop { background: var(--btn-bg); color: #fff; }
+        .btn-stop:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .pill-group { display: flex; gap: 6px; }
+        .time-pill {
+            flex: 1;
+            background: var(--btn-bg);
+            border: 1px solid var(--border);
+            color: #71717a;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 10px;
+        }
+        .time-pill.active { border-color: var(--brand); color: #fff; }
+        .time-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── VISUALIZER STAGE ── */
+        .viz-stage {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px;
+            position: relative;
+        }
+
+        .cyber-audio-live-pulse-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #71717a;
+            letter-spacing: 1px;
+            margin-bottom: 30px;
+        }
+
+        .cyber-audio-pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: #71717a;
+            border-radius: 50%;
+        }
+
+        .cyber-audio-pulse-dot.active {
+            background: var(--danger);
+            animation: pulse-glow 1.2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .wave-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 100px;
+            margin-bottom: 40px;
+        }
+
+        .wave-wrap span {
+            width: 4px;
+            height: 10px;
+            background: #2b6cb0;
+            border-radius: 2px;
+            opacity: 0.15;
+            transition: all 0.2s ease;
+        }
+
+        .wave-wrap.active span {
+            animation: bounce 0.8s ease-in-out infinite alternate;
+            background: linear-gradient(180deg, #3182ce, #63b3ed);
+            opacity: 0.8;
+            box-shadow: 0 0 10px var(--brand-glow);
+        }
+
+        @keyframes bounce {
+            0% { transform: scaleY(1); }
+            100% { transform: scaleY(6.5); }
+        }
+
+        .timer-val {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            font-weight: 900;
+            color: #a0aec0;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .status-footer {
+            font-size: 10px;
+            color: #3f3f46;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        /* SMART TOAST POPUP */
+        #smart-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #111;
+            border-left: 4px solid var(--brand);
+            padding: 15px 25px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transform: translateX(200%);
+            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            z-index: 9999;
+        }
+        #smart-toast.show { transform: translateX(0); }
+        #smart-toast i { color: var(--brand); font-size: 18px; }
+        #smart-toast span { font-size: 13px; font-weight: 600; color: #eee; }
+    </style>
+</head>
+<body>
+
+    <div id="smart-toast">
+        <i class="fas fa-circle-check"></i>
+        <span id="toast-msg">Command Execution Success</span>
+    </div>
+
+    <div class="layout">
+        <div class="controls-panel">
+            <div class="logo"><span class="white">CYBER</span><span class="cyan">EYE</span></div>
+
+            <div style="display:flex; flex-direction:column; gap:15px; margin-top:10px;">
+                <div>
+                    <span class="section-label">Monitoring Duration</span>
+                    <div class="pill-group">
+                        <button class="time-pill" data-sec="60">1M</button>
+                        <button class="time-pill active" data-sec="300">5M</button>
+                        <button class="time-pill" data-sec="600">10M</button>
+                        <button class="time-pill" data-sec="1800">30M</button>
+                    </div>
+                </div>
+
+                <button class="btn btn-start" id="start-btn"><i class="fas fa-microphone"></i> START LIVE MIC</button>
+                <button class="btn btn-stop" id="stop-btn" disabled><i class="fas fa-microphone-slash"></i> STOP MONITOR</button>
+            </div>
+
+            <div class="status-footer">
+                <i class="fas fa-satellite-dish"></i> Audio Node standby
+            </div>
+        </div>
+
+        <div class="viz-stage">
+            <div class="cyber-audio-live-pulse-row" id="live-desc">
+                <div class="cyber-audio-pulse-dot" id="pulse-dot"></div> <span id="live-status-text">STANDBY</span>
+            </div>
+
+            <div class="wave-wrap" id="wave-wrap">
+                <span style="animation-delay: 0.1s"></span>
+                <span style="animation-delay: 0.3s"></span>
+                <span style="animation-delay: 0.2s"></span>
+                <span style="animation-delay: 0.4s"></span>
+                <span style="animation-delay: 0.15s"></span>
+                <span style="animation-delay: 0.25s"></span>
+                <span style="animation-delay: 0.1s"></span>
+                <span style="animation-delay: 0.35s"></span>
+                <span style="animation-delay: 0.2s"></span>
+                <span style="animation-delay: 0.45s"></span>
+            </div>
+
+            <div class="timer-val" id="rec-timer">00:00:00</div>
+            <span style="font-size: 10px; color: #4e5566; letter-spacing:1px; font-weight:700;">STREAM ELAPSED</span>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const deviceID = urlParams.get('id');
+        let isStreaming = false, lastAudioTime = 0, elapsed = 0, elapsedTimer = null;
+        let audioQueue = [], isPlaying = false, sessionTimer = null;
+
+        function showPopup(msg, isError = false) {
+            const toast = document.getElementById('smart-toast');
+            const msgEl = document.getElementById('toast-msg');
+            const icon = toast.querySelector('i');
+
+            msgEl.textContent = msg;
+            toast.style.borderColor = isError ? 'var(--danger)' : 'var(--brand)';
+            icon.className = isError ? 'fas fa-circle-exclamation' : 'fas fa-circle-check';
+            icon.style.color = isError ? 'var(--danger)' : 'var(--brand)';
+
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function playNext() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                return;
+            }
+            isPlaying = true;
+            let url = audioQueue.shift();
+            let audio = new Audio(url);
+            audio.onended = () => {
+                playNext();
+            };
+            audio.onerror = () => {
+                playNext();
+            };
+            audio.play().catch(e => {
+                console.error("Audio playback failed/blocked:", e);
+                playNext();
+            });
+        }
+
+        function checkLiveAudio() {
+            if(!deviceID || !isStreaming) return;
+            fetch(`/api/device/${deviceID}/live_audio_status`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.url && data.time > lastAudioTime) {
+                        lastAudioTime = data.time;
+                        audioQueue.push(data.url);
+                        if (!isPlaying) {
+                            playNext();
+                        }
+                    }
+                })
+                .catch(e => console.error(e));
+        }
+        setInterval(checkLiveAudio, 1000);
+
+        function toggleControls(disable) {
+            document.getElementById('start-btn').disabled = disable;
+            document.querySelectorAll('.time-pill').forEach(p => p.disabled = disable);
+        }
+
+        document.getElementById('start-btn').onclick = async () => {
+            if(!deviceID) return alert("Device ID required");
+            const sec = document.querySelector('.time-pill.active').dataset.sec;
+
+            isStreaming = true;
+            toggleControls(true);
+            document.getElementById('stop-btn').disabled = false;
+
+            // UI Feedback Active
+            document.getElementById('pulse-dot').classList.add('active');
+            document.getElementById('wave-wrap').classList.add('active');
+            document.getElementById('live-status-text').textContent = "LIVE MIC MONITOR";
+            document.getElementById('live-desc').style.color = '#ef4444';
+            document.querySelector('.status-footer').innerHTML = `<i class="fas fa-satellite-dish fa-spin" style="color:var(--brand)"></i> Remote Mic Active`;
+
+            await fetch(`/api/device/${deviceID}/action`, {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({action:`START_LIVE_AUDIO:${sec}`})
+            });
+            showPopup(`Starting live audio stream...`);
+
+            elapsed = 0;
+            document.getElementById('rec-timer').textContent = "00:00:00";
+            if (elapsedTimer) clearInterval(elapsedTimer);
+            elapsedTimer = setInterval(() => {
+                elapsed++;
+                const h = Math.floor(elapsed / 3600);
+                const m = Math.floor((elapsed % 3600) / 60);
+                const s = elapsed % 60;
+                document.getElementById('rec-timer').textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            }, 1000);
+
+            if(sessionTimer) clearTimeout(sessionTimer);
+            sessionTimer = setTimeout(async () => {
+                showPopup("Live Session finished. Stream Stopped.", true);
+                stopStreamUI();
+                await fetch(`/api/device/${deviceID}/action`, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({action:'STOP_LIVE_AUDIO'})
+                });
+            }, sec * 1000);
+        };
+
+        function stopStreamUI() {
+            isStreaming = false;
+            toggleControls(false);
+            document.getElementById('stop-btn').disabled = true;
+            
+            document.getElementById('pulse-dot').classList.remove('active');
+            document.getElementById('wave-wrap').classList.remove('active');
+            document.getElementById('live-status-text').textContent = "STANDBY";
+            document.getElementById('live-desc').style.color = '#71717a';
+            document.querySelector('.status-footer').innerHTML = `<i class="fas fa-satellite-dish"></i> Audio Node standby`;
+            
+            if (elapsedTimer) clearInterval(elapsedTimer);
+            document.getElementById('rec-timer').textContent = "00:00:00";
+            audioQueue = [];
+            isPlaying = false;
+        }
+
+        document.getElementById('stop-btn').onclick = async () => {
+            if(sessionTimer) clearTimeout(sessionTimer);
+            stopStreamUI();
+            await fetch(`/api/device/${deviceID}/action`, {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({action:'STOP_LIVE_AUDIO'})
+            });
+            showPopup("Live Audio Pipeline Closed");
+        };
+
+        document.querySelectorAll('.time-pill').forEach(p => p.onclick = () => {
+            document.querySelectorAll('.time-pill').forEach(x => x.classList.remove('active'));
+            p.classList.add('active');
+        });
+    </script>
+</body>
+</html>

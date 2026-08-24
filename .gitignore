@@ -1,0 +1,12 @@
+# Ignore data and media folders
+data/
+media/
+
+# Ignore local database and caches
+database.json
+__pycache__/
+*.pyc
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db

