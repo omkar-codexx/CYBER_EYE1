@@ -734,3 +734,61 @@ def user_report_issue():
     users_database["reports"].append(new_report)
     save_users_db()
     return jsonify({"success": True, "message": "Issue reported successfully. Support team will contact you.", "report_id": report_id})
+
+@api_bp.route('/api/vpn/probe', methods=['GET', 'POST'], endpoint='vpn_probe')
+def vpn_probe():
+    """
+    Automated Backend Proton Health-Check Probe:
+    Detects current Proton Public IP & Forwarded Port, tests http://<Proton_IP>:<Port>/checkme,
+    and returns comprehensive diagnostic report.
+    """
+    from services.telegram_notifier import get_public_ip, get_forwarded_port
+    
+    # 1. Fetch current dynamic IP and Port
+    ip = get_public_ip()
+    port = get_forwarded_port()
+    
+    probe_url = f"http://{ip}:{port}/checkme" if (ip and port) else None
+    
+    result = {
+        "timestamp": int(time.time()),
+        "proton_public_ip": ip,
+        "proton_forwarded_port": port,
+        "probe_url": probe_url,
+        "reachable": False,
+        "status_code": None,
+        "latency_ms": None,
+        "error": None,
+        "internal_gateway_ok": False
+    }
+    
+    # Check internal gateway reachability first
+    try:
+        r_internal = requests.get("http://127.0.0.1:5001/checkme", timeout=2)
+        if r_internal.status_code == 200:
+            result["internal_gateway_ok"] = True
+    except Exception as e:
+        result["internal_gateway_ok"] = False
+        result["internal_error"] = str(e)
+
+    if not ip or not port:
+        result["error"] = "Proton Public IP or Forwarded Port is not available yet (VPN initializing)."
+        return jsonify(result), 503
+
+    # Test the external URL via HTTP probe
+    t0 = time.time()
+    try:
+        resp = requests.get(probe_url, timeout=5)
+        result["latency_ms"] = round((time.time() - t0) * 1000, 2)
+        result["status_code"] = resp.status_code
+        if resp.status_code == 200:
+            result["reachable"] = True
+            result["response_data"] = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text[:200]
+        else:
+            result["error"] = f"Endpoint returned HTTP {resp.status_code}"
+    except requests.exceptions.Timeout:
+        result["error"] = "Connection timed out (Proton node port forwarding handshake may be pending or ISP blocked)."
+    except Exception as e:
+        result["error"] = f"{type(e).__name__}: {str(e)}"
+
+    return jsonify(result), (200 if result["reachable"] else 502)

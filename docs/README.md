@@ -5,6 +5,7 @@ This directory contains architectural, design, and reference documentation for t
 ## Documentation Index
 
 - [Gluetun ProtonVPN Port Forwarding Guide](file:///home/vedx/Videos/Proton/docs/gluetun_vpn_port_forwarding_guide.md) — CGNAT bypass, automated NAT-PMP port forwarding, and Telegram alerts.
+- [Multi-Device Load Testing & Benchmarking Guide](file:///home/vedx/Videos/Proton/docs/load_testing_and_benchmarking_guide.md) — Production guide to stress-testing 10–1,000 devices, measuring RPS/latency, and live server monitoring.
 - [Nginx Load Balancer & Kubernetes Scaling Guide](file:///home/vedx/Videos/Proton/docs/load_balancer_and_k8s_roadmap.md) — High-concurrency device handling (25–100+ devices), localhost-only admin binding, and K8s roadmap.
 - [famX Dual-Port Gateway Architecture](file:///home/vedx/Videos/Proton/docs/famx_gateway_architecture.md) — Dual-port topology (Web Port 8800 vs Hardware Port 5000) and famX token security.
 - [Complete Project Architecture & Logic Reference](file:///home/vedx/Videos/Proton/docs/complete_project_architecture_and_logic.md) — Comprehensive technical reference for models, 61 routes, and socket events.

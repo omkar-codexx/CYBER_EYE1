@@ -28,6 +28,24 @@ def create_gateway_app():
             "port": DEVICE_PORT
         })
 
+    @app.route('/checkme', methods=['GET', 'POST'])
+    def gateway_checkme():
+        """
+        Public health-check endpoint for hardware & external verification.
+        When accessed via ProtonVPN (http://<Proton_IP>:<Proton_Port>/checkme),
+        returns full diagnostic information about the incoming connection.
+        """
+        return jsonify({
+            "status": "ok",
+            "connected": True,
+            "service": "famX Ingestion Gateway",
+            "server_time": int(time.time()),
+            "client_ip": request.remote_addr,
+            "host_header": request.headers.get("Host"),
+            "user_agent": request.headers.get("User-Agent"),
+            "message": "Hardware gateway is REACHABLE and READY to receive data!"
+        }), 200
+
     @app.route('/api/device/<device_id>/token', methods=['GET'])
     def get_device_token(device_id):
         """Helper endpoint for hardware provisioning with a famX token."""
