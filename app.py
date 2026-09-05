@@ -3,8 +3,7 @@ import json
 import re
 import time
 import requests
-import threading
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, abort
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from telegram_notifier import start_ip_port_monitor, get_current_connection_status
 
@@ -802,41 +801,10 @@ def clear_chats(device_id):
 def network_status():
     return jsonify(get_current_connection_status())
 
-# Port configurations
-DASHBOARD_PORT = int(os.environ.get('DASHBOARD_PORT', 8080))
-AGENT_PORT = int(os.environ.get('PORT', 5000))
-HOST = os.environ.get('HOST', '0.0.0.0')
-
-@app.before_request
-def restrict_agent_port():
-    """
-    Blocks all Dashboard UI and admin pages from being accessed over the
-    public ProtonVPN forwarded port (AGENT_PORT). Only Socket.IO and media uploads
-    are permitted on AGENT_PORT.
-    """
-    server_port = int(request.environ.get('SERVER_PORT', 0))
-    if server_port == AGENT_PORT:
-        path = request.path
-        # Allow only Socket.IO client traffic and device media uploads
-        if path.startswith('/socket.io') or '/upload_media' in path:
-            return None
-        # Return 404 for any Dashboard UI or admin route requested over the public forwarded port
-        abort(404)
-
 # Start IP & Port monitoring daemon
 start_ip_port_monitor()
 
 if __name__ == '__main__':
-    from werkzeug.serving import run_simple
-
-    def run_dashboard():
-        print(f"[*] Private Admin Dashboard starting on http://{HOST}:{DASHBOARD_PORT}")
-        run_simple(HOST, DASHBOARD_PORT, app, threaded=True)
-
-    # Launch Private Dashboard in background thread (local host only: http://localhost:8080)
-    dashboard_thread = threading.Thread(target=run_dashboard, daemon=True, name="DashboardServerThread")
-    dashboard_thread.start()
-
-    # Launch Public Agent Receiver on main thread (http://<VPN_IP>:<FORWARDED_PORT> -> container:5000)
-    print(f"[*] Agent Receiver (Socket.IO) starting on http://{HOST}:{AGENT_PORT}")
-    socketio.run(app, host=HOST, port=AGENT_PORT, debug=False, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get('PORT', 5000))
+    host = os.environ.get('HOST', '0.0.0.0')
+    socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
