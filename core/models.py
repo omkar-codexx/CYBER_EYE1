@@ -77,10 +77,19 @@ class Device(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
+        info_val = self.info or {}
+        if isinstance(info_val, str):
+            parsed_info = {}
+            for line in info_val.split('\n'):
+                if ':' in line:
+                    k, v = line.split(':', 1)
+                    parsed_info[k.strip().lower()] = v.strip()
+            info_val = parsed_info
+
         d = {
             "_id": self.device_id,
             "license_key": self.license_key,
-            "info": self.info or "",
+            "info": info_val,
             "logs": self.logs or [],
             "refs": self.refs or {},
             "lastSeen": self.last_seen or 0,

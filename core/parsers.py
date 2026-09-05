@@ -121,7 +121,14 @@ def update_device_record(device_id, category, data):
 
     if "_id" not in database[device_id]: database[device_id]["_id"] = device_id
     if "lastSeen" not in database[device_id]: database[device_id]["lastSeen"] = int(time.time() * 1000)
-    if "info" not in database[device_id]: database[device_id]["info"] = {}
+    if "info" not in database[device_id] or not isinstance(database[device_id]["info"], dict):
+        parsed = {}
+        if isinstance(database[device_id].get("info"), str):
+            for line in database[device_id]["info"].split('\n'):
+                if ':' in line:
+                    k, v = line.split(':', 1)
+                    parsed[k.strip().lower()] = v.strip()
+        database[device_id]["info"] = parsed
     if "refs" not in database[device_id]: database[device_id]["refs"] = {}
     if "media" not in database[device_id]: database[device_id]["media"] = {}
     if "logs" not in database[device_id]: database[device_id]["logs"] = []

