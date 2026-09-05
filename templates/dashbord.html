@@ -3210,13 +3210,19 @@
         arr = arr.filter(m => (m.name || "").toLowerCase().includes(searchQuery));
       }
 
-      // Strictly separate screenshots and camera photos (excluding webpage preview .dat maps)
+      // Strictly separate screenshots and camera photos (excluding mirror feeds, live camera frames, and webpage preview .dat maps)
+      const isMirrorOrLive = (name) => {
+        const n = (name || "").toLowerCase();
+        return n.includes("mirror") || n.includes("live_camera");
+      };
+
       const cameraMedia = arr.filter(m => m.type === "image" && 
-                                          !m.name?.includes("screenshot") && 
-                                          !m.name?.includes("ss_") &&
+                                          !isMirrorOrLive(m.name) &&
+                                          !m.name?.toLowerCase().includes("screenshot") && 
+                                          !m.name?.toLowerCase().includes("ss_") &&
                                           !m.name?.toLowerCase().endsWith(".dat") &&
                                           !m.name?.includes("DeviceID"));
-      const screenshotMedia = arr.filter(m => m.type === "screenshot" || (m.type === "image" && (m.name?.includes("screenshot") || m.name?.includes("ss_"))));
+      const screenshotMedia = arr.filter(m => (m.type === "screenshot" || (m.type === "image" && (m.name?.toLowerCase().includes("screenshot") || m.name?.toLowerCase().includes("ss_")))) && !isMirrorOrLive(m.name));
 
       // Images
       const camH = cameraMedia.map(m => {

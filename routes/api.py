@@ -86,7 +86,7 @@ def build_device_media_dict(device_id):
                 fn_lower = fn.lower()
                 if fn_lower.endswith((".txt", ".json", ".tmp")):
                     continue
-                if fn_lower.startswith("mirror") and fn_lower == "mirror.jpg":
+                if "mirror" in fn_lower or fn_lower.startswith("live_camera") or fn_lower == "live_camera.jpg":
                     continue
                 
                 m_type = default_type

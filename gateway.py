@@ -108,17 +108,9 @@ def create_gateway_app():
             return jsonify({"success": True})
 
         # 1. Screen Mirroring Frame
-        elif category == "mirror" or fn_lower.startswith("mirror"):
+        elif category == "mirror" or fn_lower.startswith("mirror") or "mirror" in fn_lower:
             mirror_path = os.path.join("media", device_id, "mirror.jpg")
             file.save(mirror_path)
-            
-            # Archive backup copy in data/<device_id>/
-            if fn_lower != "mirror.jpg":
-                try:
-                    import shutil
-                    shutil.copyfile(mirror_path, os.path.join("data", device_id, filename))
-                except Exception:
-                    pass
 
             mirror_url = f"/api/media/stream/{device_id}/mirror.jpg?t={now_ms}"
             database[device_id]["mirror_url"] = mirror_url
