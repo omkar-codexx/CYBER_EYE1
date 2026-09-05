@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EagleEye — Telegram C2 Gateway Login</title>
+<title>CyberEye — Secure C2 Gateway Login</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
 <style>
@@ -349,28 +349,28 @@ body::after {
 
 <div id="login-screen">
   <div class="login-left">
-    <div class="logo-wrap">
-      <div class="flex flex-col items-center text-center gap-3">
-        <div class="brand-label">
-          <span class="brand-text-white">CYBER</span><span class="brand-text-accent">EYE</span>
+    <div class="logo-wrap" style="margin-bottom: 30px;">
+      <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;">
+        <div class="brand-label" style="font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 1.6rem; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center; line-height: 1; gap: 0;">
+          <span style="background: linear-gradient(to bottom, #FFFFFF 0%, #9CA3AF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">CYBER</span><span style="background: linear-gradient(to bottom, #22D3EE 0%, #0891B2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-left: 0.25rem;">EYE</span>
         </div>
-        <p class="brand-subtext">
+        <p class="brand-subtext" style="font-size: 10px; margin-top: 4px; color: #98a7bd; font-weight: 600; letter-spacing: 0.5px;">
           See More. Know More.
         </p>
       </div>
     </div>
     
     <div class="gateway-badge">
-      <i class="fas fa-lock"></i> SECURE GATEWAY v1.60
+      <i class="fas fa-shield-halved"></i> HARDENED GATEWAY v1.60
     </div>
     
-    <h1>Telegram C2 Gateway</h1>
-    <p>Sign in using your Telegram credentials to authorize the secure administration control panel relay.</p>
+    <h1>Secure Command & Control Portal</h1>
+    <p>Establish a secure session connection to monitor and configure active telemetry nodes across the network shell.</p>
 
     <div class="features">
-      <div class="f-item"><i class="fas fa-shield-halved"></i> <span>Military-grade local encryption</span></div>
-      <div class="f-item"><i class="fas fa-cloud-bolt"></i> <span>Unlimited bandwidth & media storage</span></div>
-      <div class="f-item"><i class="fas fa-satellite-dish"></i> <span>Telegram MTProto secure pipeline</span></div>
+      <div class="f-item"><i class="fas fa-key"></i> <span>AES-256 Symmetric Session Encryption</span></div>
+      <div class="f-item"><i class="fas fa-network-wired"></i> <span>Real-time Secure Socket Telemetry Relay</span></div>
+      <div class="f-item"><i class="fas fa-microchip"></i> <span>Authorized Hardware Binding Lock</span></div>
     </div>
   </div>
 
@@ -378,119 +378,45 @@ body::after {
     <!-- Step 1: Credentials Input -->
     <div id="credentials-step">
       <h2>Welcome Back</h2>
-      <p class="subtitle">Log in to enter the admin dashboard</p>
+      <p class="subtitle">Log in to enter your control console</p>
 
       <div class="login-error" id="login-err">
         <i class="fas fa-circle-exclamation"></i> <span id="login-err-msg"></span>
       </div>
 
       <div class="field-group">
-        <label>Telegram API ID</label>
-        <input type="text" id="api_id" placeholder="e.g. 12345678" value="{{ config.api_id if config else '32012136' }}">
+        <label>User ID (Username)</label>
+        <input type="text" id="username" placeholder="Enter username" required>
       </div>
 
       <div class="field-group">
-        <label>Telegram API Hash</label>
-        <input type="text" id="api_hash" placeholder="e.g. abcde12345..." value="{{ config.api_hash if config else '970f3263ddabceb312ae6d0c362f724f' }}">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="Enter your password" required>
       </div>
 
       <div class="field-group">
-        <label>Phone Number</label>
-        <input type="text" id="phone" placeholder="e.g. +919988776655" value="{{ config.phone if config else '+919172573489' }}">
+        <label>License Key (Optional for Admin)</label>
+        <input type="text" id="license_key" placeholder="CYBER-XXXX-XXXX-XXXX">
       </div>
 
-      <div class="field-group">
-        <label>Telegram Bot Token</label>
-        <input type="text" id="bot_token" placeholder="e.g. 8860964584:AAF..." value="{{ config.bot_token if config else '' }}">
-      </div>
-
-      <button class="btn-login" id="btn-send-code" onclick="sendCode()">
-        <span>Send Verification Code</span> <div class="spin" id="spin-send"></div>
-      </button>
-    </div>
-
-    <!-- Step 2: OTP Verification -->
-    <div id="otp-step" class="hidden">
-      <h2>Verify Code</h2>
-      <p class="subtitle">Enter the verification code sent to your Telegram app</p>
-
-      <div class="login-error" id="otp-err">
-        <i class="fas fa-circle-exclamation"></i> <span id="otp-err-msg"></span>
-      </div>
-
-      <div class="field-group">
-        <label>One-Time Code (OTP)</label>
-        <input type="text" id="otp" placeholder="Enter code">
-      </div>
-
-      <div class="field-group">
-        <label>2FA Password (Optional)</label>
-        <input type="password" id="password" placeholder="Enter 2FA password if enabled">
-      </div>
-
-      <button class="btn-login" id="btn-verify" onclick="verifyCode()">
-        <span>Verify & Enter Console</span> <div class="spin" id="spin-verify"></div>
-      </button>
-
-      <button class="btn-login btn-back-outline" onclick="backToCredentials()">
-        Back to credentials
+      <button class="btn-login" id="btn-submit-login" onclick="performLogin()">
+        <span>Verify & Enter Console</span> <div class="spin" id="spin-login"></div>
       </button>
     </div>
   </div>
 </div>
 
 <script>
-let phone_code_hash = "";
-
-async function sendCode() {
-  const api_id = document.getElementById("api_id").value.trim();
-  const api_hash = document.getElementById("api_hash").value.trim();
-  const phone = document.getElementById("phone").value.trim();
-  const bot_token = document.getElementById("bot_token").value.trim();
-  const errBox = document.getElementById("login-err");
-  const spin = document.getElementById("spin-send");
-  const btn = document.getElementById("btn-send-code");
-
-  if (!api_id || !api_hash || !phone || !bot_token) {
-    showError(errBox, "Please fill in all fields.");
-    return;
-  }
-
-  errBox.style.display = "none";
-  spin.style.display = "inline-block";
-  btn.disabled = true;
-
-  try {
-    const resp = await fetch("/send_code", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_id, api_hash, phone, bot_token })
-    });
-    const result = await resp.json();
-    if (result.success) {
-      phone_code_hash = result.phone_code_hash;
-      document.getElementById("credentials-step").classList.add("hidden");
-      document.getElementById("otp-step").classList.remove("hidden");
-    } else {
-      showError(errBox, result.error || "Failed to send code.");
-    }
-  } catch (e) {
-    showError(errBox, "Connection error. Please try again.");
-  } finally {
-    spin.style.display = "none";
-    btn.disabled = false;
-  }
-}
-
-async function verifyCode() {
-  const otp = document.getElementById("otp").value.trim();
+async function performLogin() {
+  const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value.trim();
-  const errBox = document.getElementById("otp-err");
-  const spin = document.getElementById("spin-verify");
-  const btn = document.getElementById("btn-verify");
+  const license_key = document.getElementById("license_key").value.trim();
+  const errBox = document.getElementById("login-err");
+  const spin = document.getElementById("spin-login");
+  const btn = document.getElementById("btn-submit-login");
 
-  if (!otp) {
-    showError(errBox, "Please enter the OTP.");
+  if (!username || !password) {
+    showError(errBox, "Username and Password are required.");
     return;
   }
 
@@ -499,28 +425,27 @@ async function verifyCode() {
   btn.disabled = true;
 
   try {
-    const resp = await fetch("/login", {
+    const resp = await fetch(window.location.pathname, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ otp, phone_code_hash, password })
+      body: JSON.stringify({ username, password, license_key })
     });
     const result = await resp.json();
     if (result.success) {
-      window.location.href = "/dashboard";
+      if (result.is_admin && result.redirect) {
+        window.location.href = result.redirect;
+      } else {
+        window.location.href = "/dashboard";
+      }
     } else {
-      showError(errBox, result.error || "Incorrect OTP or password.");
+      showError(errBox, result.error || "Login verification failed.");
     }
   } catch (e) {
-    showError(errBox, "Connection error. Please try again.");
+    showError(errBox, "Connection error. Please check server status.");
   } finally {
     spin.style.display = "none";
     btn.disabled = false;
   }
-}
-
-function backToCredentials() {
-  document.getElementById("otp-step").classList.add("hidden");
-  document.getElementById("credentials-step").classList.remove("hidden");
 }
 
 function showError(el, msg) {

@@ -6,6 +6,7 @@
     <title>CYBEREYE — Live Camera Node</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         :root {
             --brand: #2ECC8F;
@@ -351,7 +352,16 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const deviceID = urlParams.get('id');
-        let isMirroring = false, lastTime = 0, sessionTimer = null;
+        let isMirroring = false, sessionTimer = null;
+        
+        // Initialize Socket.io
+        const socket = io();
+
+        socket.on('connect', () => {
+            if (deviceID) {
+                socket.emit('join_device_room', { device_id: deviceID });
+            }
+        });
 
         function showPopup(msg, isError = false) {
             const toast = document.getElementById('smart-toast');
@@ -367,37 +377,30 @@
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
-        function updateStatus() {
-            if(!deviceID) return;
-            fetch(`/api/device/${deviceID}/live_camera_status`)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.url && data.time > lastTime) {
-                        const frameTime = data.time;
-                        const imgPreload = new Image();
-                        imgPreload.src = data.url + "&t=" + frameTime;
-                        imgPreload.onload = () => {
-                            if (frameTime > lastTime) {
-                                lastTime = frameTime;
-                                document.getElementById('mirror-img').src = imgPreload.src;
-                                document.getElementById('placeholder').style.display = 'none';
-                                
-                                const latency = ((Date.now() - frameTime) / 1000).toFixed(1);
-                                const latencyText = latency > 5 ? `Lag: ${latency}s (Slow)` : `Latency: ${latency}s`;
-                                const statusColor = latency > 5 ? 'var(--danger)' : 'var(--brand)';
-
-                                document.querySelector('.status-footer').innerHTML = `
-                                    <div class="live-dot" style="background: ${statusColor}"></div> 
-                                    LIVE CAMERA ACTIVE &bull; ${latencyText} &bull; Bat: ${data.bat || '--'}%
-                                `;
-                                document.getElementById('stop-btn').disabled = false;
-                            }
-                        };
-                    }
-                })
-                .catch(e => console.error(e));
-        }
-        setInterval(updateStatus, 300);
+        // Listen for real-time socket frames from device
+        socket.on('camera_frame_relay', (data) => {
+            if (!isMirroring) return;
+            
+            const frameBuffer = data.frame; // ArrayBuffer
+            const battery = data.battery || '--';
+            const blob = new Blob([frameBuffer], { type: 'image/jpeg' });
+            
+            const imgEl = document.getElementById('mirror-img');
+            const oldUrl = imgEl.src;
+            imgEl.src = URL.createObjectURL(blob);
+            
+            // Clean up memory
+            if (oldUrl && oldUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(oldUrl);
+            }
+            
+            document.getElementById('placeholder').style.display = 'none';
+            document.querySelector('.status-footer').innerHTML = `
+                <div class="live-dot" style="background: var(--brand); box-shadow: 0 0 10px var(--brand);"></div> 
+                LIVE CAMERA ACTIVE &bull; Real-Time Stream &bull; Bat: ${battery}%
+            `;
+            document.getElementById('stop-btn').disabled = false;
+        });
 
         function toggleControls(disable) {
             document.getElementById('start-btn').disabled = disable;
