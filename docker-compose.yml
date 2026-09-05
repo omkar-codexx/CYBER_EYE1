@@ -29,22 +29,66 @@ services:
       WEB_PORT: "8800"
       DEVICE_PORT: "5000"
       HOST: "0.0.0.0"
+      DATABASE_URL: "postgresql://proton_admin:proton_secure_pass@postgres:5432/proton_db"
+      REDIS_URL: "redis://redis:6379/0"
       SECRET_KEY: "${SECRET_KEY:-cybereye-secret}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-AIzaSyBsHMZ1SrAaMXdXScPGbycCZokkD5B3tP0}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
       IP_PORT_CHECK_INTERVAL: "${IP_PORT_CHECK_INTERVAL:-30}"
     volumes:
-      # Persistent databases
-      - ./database.json:/app/database.json
+      # Persistent backup JSON
       - ./users_db.json:/app/users_db.json
       # Device logs, calls, sms, contacts
       - ./data:/app/data
       # Uploaded media, recordings, photos
       - ./media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - proton-net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: proton-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: proton_db
+      POSTGRES_USER: proton_admin
+      POSTGRES_PASSWORD: proton_secure_pass
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proton_admin -d proton_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proton-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: proton-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - proton-net
 
 networks:
   proton-net:
+    name: proton_proton-net
     driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:

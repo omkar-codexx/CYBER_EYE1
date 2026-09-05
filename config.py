@@ -17,3 +17,9 @@ WEB_PORT = int(os.environ.get('WEB_PORT', 8800))
 DEVICE_PORT = int(os.environ.get('DEVICE_PORT', 5000))
 HOST = os.environ.get('HOST', '0.0.0.0')
 
+# Database & Redis Connection URLs
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
+REDIS_URL = os.environ.get('REDIS_URL', '')
+
+
+

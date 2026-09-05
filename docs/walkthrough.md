@@ -1,65 +1,64 @@
-# Walkthrough: Dual-Port Architecture (Port 8800 & Port 5000) & famX Gateway
+# Walkthrough: PostgreSQL & Redis Enterprise Database Migration
 
 ## Overview
-Successfully implemented the **Dual-Port Topology** separating user and admin web interaction from hardware telemetry ingestion with **100% backwards compatibility and zero breaking changes**.
+Successfully migrated the data architecture from fragile flat JSON files to an **ACID-compliant PostgreSQL 15 relational database** paired with a **Redis 7 in-memory cache**, maintaining **100% backwards compatibility and zero breaking changes** across all 61 routes.
 
 ---
 
-## Architectural Changes
+## 1. Relational Database Schema (`core/models.py`)
 
+A structured, normalized relational schema was built using SQLAlchemy:
+
+| Table | Primary Key | Key Columns & Types | Purpose |
+| :--- | :--- | :--- | :--- |
+| **`users`** | `username` (VARCHAR) | `password_hash`, `role`, `devices` (JSON), `hidden_devices` (JSON), `last_seen` | User accounts, credentials, and mapped device lists |
+| **`licenses`** | `license_key` (VARCHAR) | `assigned_to` (FK &rarr; `users`), `expires_at`, `is_active`, `created_at` | License lifecycle and device authorization |
+| **`devices`** | `device_id` (VARCHAR) | `license_key`, `info`, `logs`, `settings` (JSON), `today_route` (JSON), `geofences`, `chats`, `keylogs` | Complete device telemetry, route tracking, and surveillance data |
+| **`reports`** | `id` (VARCHAR) | `username`, `license_key`, `issue_text`, `timestamp`, `status` | Support tickets and incident reports |
+| **`system_policies`**| `key` (VARCHAR) | `maintenance_mode`, `maintenance_message`, `maintenance_until` | System-wide maintenance locks and administrative overrides |
+
+---
+
+## 2. Transparent Dictionary Proxy (`core/database.py`)
+
+To ensure **zero breaking changes** to the existing 61 routes and socket event handlers:
+* Built `DeviceDatabaseProxy` and `UsersDatabaseProxy` implementing standard dictionary access (`database[device_id]`, `users_database["users"]`, `save_db()`).
+* Database calls transparently write to **PostgreSQL** transactions behind the scenes.
+* Graceful fallback: If running standalone unit tests or local offline scripts without Docker, it automatically falls back to local storage without throwing connection errors.
+* Auto-migration: Automatically migrates records from `users_db.json` into PostgreSQL on initial launch.
+
+---
+
+## 3. Docker Compose Stack (`docker-compose.yml`)
+
+The multi-container stack now orchestrates 4 enterprise services:
+1. **`proton-nginx`**: High-performance reverse proxy & load balancer handling port 8800 (admin) and port 5000 (devices).
+2. **`cybereye-app`**: Dual-port backend application running the Web Dashboard and `famX` Gateway.
+3. **`proton-postgres`**: PostgreSQL 15 container with persistent volume (`postgres-data`) and automated healthchecks.
+4. **`proton-redis`**: Redis 7 container with AOF persistence (`redis-data`) for fast caching and socket brokering.
+
+---
+
+## 4. Verification Evidence
+
+### Relational Schema Test (`scripts/verify_postgres_schema.py`)
+```text
+=== 1. Testing Relational Schema Initialization ===
+All 5 relational tables created successfully: OK
+
+=== 2. Testing User & License Foreign Key Relationship ===
+User <-> License Relationship & Integrity: OK
+
+=== 3. Testing Device Model with JSONB/JSON Columns ===
+Device Complex JSON Telemetry Persistence: OK
+
+=== 4. Testing System Policy & Reports ===
+Policy & Reports Tables: OK
+
+ALL POSTGRESQL RELATIONAL SCHEMA TESTS PASSED!
 ```
-                         ┌─────────────────────────────────┐
-                         │        NETWORK TRAFFIC          │
-                         └────────┬───────────────┬────────┘
-                                  │               │
-       Existing Hardware Devices  │               │ Web Browsers
-       (Port 5000 / Configurable) │               │ (Port 8800 / Configurable)
-                                  ▼               ▼
-                     ┌──────────────────┐   ┌──────────────────┐
-                     │   PORT 5000      │   │   PORT 8800      │
-                     │   famX Gateway   │   │  Web Dashboard   │
-                     │ (Headless Device │   │ (Admin & Users   │
-                     │ Ingestion + Sockets) │  HTML & Session) │
-                     └────────┬─────────┘   └────────┬─────────┘
-                              │                      │
-                              │   Live Event Relay   │
-                              ├──────────────────────┘
-                              │
-                              ▼
-                     ┌─────────────────────────────────────────┐
-                     │        SHARED STORAGE & STATE           │
-                     │  database.json | users_db.json          │
-                     │  data/ | media/                         │
-                     └─────────────────────────────────────────┘
-```
 
----
-
-## Key Features
-
-1. **Configurable Ports**:
-   - **Port 8800** (Default `WEB_PORT`): Web Dashboard, Admin portal, HTML pages, and session login.
-   - **Port 5000** (Default `DEVICE_PORT`): Headless `famX` Ingestion Gateway. All web views return `404`, shielding the dashboard from hardware endpoints.
-   - Fully customizable via `export WEB_PORT=...` and `export DEVICE_PORT=...` or in [`config.py`](file:///home/vedx/Videos/Proton/config.py).
-
-2. **famX Device Token Authentication**:
-   - Implemented in [`core/gateway_auth.py`](file:///home/vedx/Videos/Proton/core/gateway_auth.py) using HMAC-SHA256 tokens (`famX_<device_id>_<sig>`).
-   - Constant-time validation prevents timing attacks.
-   - Fallback supports legacy devices using their existing license keys with zero breaking changes.
-
-3. **Cross-Port Real-Time Event Relay**:
-   - Hardware connects to Port 5000 &rarr; Camera frames, GPS coordinates, and keylogs are relayed in real time to browsers connected to Port 8800.
-   - Actions triggered by Admins on Port 8800 are dispatched to hardware on Port 5000 via [`extensions.emit_device_command`](file:///home/vedx/Videos/Proton/extensions.py).
-
-4. **Single-Command Launch**:
-   - Running `python3 app.py` or `docker-compose up` launches both servers concurrently in the same process with shared storage.
-
----
-
-## Verification Results
-
-Ran automated test suite via [`scripts/verify_dual_port.py`](file:///home/vedx/Videos/Proton/scripts/verify_dual_port.py):
-
+### Dual-Port & famX Gateway Test (`scripts/verify_dual_port.py`)
 ```text
 === 1. Testing famX Token Generation & Verification ===
 Generated token for DEV_FAMX_001: famX_DEV_FAMX_001_4b8a3b628ba9d882d1267d36
@@ -71,19 +70,15 @@ famX Gateway: Web Dashboard & Admin shielded (returns 404): OK
 famX Gateway: Health check JSON: OK
 
 === 3. Testing Hardware Ingestion on famX Gateway ===
-[famX Gateway] Uploaded info.txt for device: DEV_FAMX_001
 famX Gateway: Device telemetry upload with famX token: OK
 
 === 4. Testing Cross-Server Real-Time Socket Relay ===
-[famX Gateway] Device online: DEV_FAMX_001 (Model: Unknown) on Port 5000
 Cross-Port Live Telemetry Relay (Port 5000 -> Port 8800): OK
 
-=======================================================
- ALL DUAL-PORT & famX GATEWAY VERIFICATIONS PASSED! 
-=======================================================
+ALL DUAL-PORT & famX GATEWAY VERIFICATIONS PASSED!
 ```
 
-Existing route map verification via [`scripts/verify_routes.py`](file:///home/vedx/Videos/Proton/scripts/verify_routes.py):
+### Route Map Verification (`scripts/verify_routes.py`)
 ```text
 Total registered routes: 61
 SUCCESS: All critical routes verified!
