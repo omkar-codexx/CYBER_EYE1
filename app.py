@@ -6,7 +6,10 @@ import requests
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from functools import wraps
-from telegram_notifier import start_ip_port_monitor, get_current_connection_status
+try:
+    from services.telegram_notifier import start_ip_port_monitor, get_current_connection_status
+except ImportError:
+    from telegram_notifier import start_ip_port_monitor, get_current_connection_status
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cybereye-secret'

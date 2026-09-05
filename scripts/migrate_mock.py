@@ -2,8 +2,9 @@ import os
 import json
 import time
 
-DB_FILE = 'database.json'
-parent_dir = '..'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_FILE = os.path.join(BASE_DIR, 'database.json')
+parent_dir = os.path.dirname(BASE_DIR)
 
 database = {}
 
