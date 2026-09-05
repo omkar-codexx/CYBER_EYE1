@@ -6,10 +6,11 @@ import requests
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from functools import wraps
+from telegram_notifier import start_ip_port_monitor, get_current_connection_status
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cybereye-secret'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet', allow_eio3=True)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', allow_eio3=True)
 
 # --- CONFIGURATION ---
 DB_FILE = 'database.json'
@@ -1464,7 +1465,13 @@ def clear_chats(device_id):
             'time': 0
         })
     return jsonify({'success': True})
+    
+@app.route('/api/network_status', methods=['GET'])
+def network_status():
+    return jsonify(get_current_connection_status())
 
+# Start IP & Port monitoring daemon
+start_ip_port_monitor()
 
 # --- Admin Panel & APIs ---
 @app.route('/admin')
@@ -1883,4 +1890,6 @@ def admin_resolve_report():
 
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    host = os.environ.get('HOST', '0.0.0.0')
+    socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
