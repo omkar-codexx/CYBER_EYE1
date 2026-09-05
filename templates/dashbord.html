@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EagleEye — Parental Control Dashboard</title>
+  <title>CyberEye — Secure Administration Dashboard</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
     crossorigin="anonymous" referrerpolicy="no-referrer">
   <link
@@ -543,6 +543,80 @@
     .sync-btn:hover {
       filter: brightness(1.1);
       transform: translateY(-1px);
+    }
+
+    .profile-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border2);
+      border-radius: 50%;
+      color: var(--brand);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      font-size: 1.15rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .profile-btn:hover {
+      background: var(--brand-soft);
+      border-color: var(--brand);
+      color: var(--brand);
+      box-shadow: 0 0 15px var(--brand-glow);
+      transform: scale(1.08);
+    }
+
+    /* Profile modal glassmorphism styles */
+    #profile-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(7, 8, 11, 0.85);
+      backdrop-filter: blur(14px);
+      z-index: 99999;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    #profile-modal.show {
+      display: flex;
+      opacity: 1;
+    }
+    .profile-modal-content {
+      background: #181C26;
+      border: 1.5px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 35px;
+      width: 500px;
+      max-width: 90%;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), 0 0 30px rgba(46, 204, 143, 0.15);
+      position: relative;
+      transform: scale(0.9);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    #profile-modal.show .profile-modal-content {
+      transform: scale(1);
+    }
+    .profile-close-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: transparent;
+      border: none;
+      color: var(--text3);
+      cursor: pointer;
+      font-size: 1.25rem;
+      transition: color 0.2s;
+    }
+    .profile-close-btn:hover {
+      color: white;
     }
 
     /* ══════════════════════════════════
@@ -1617,8 +1691,9 @@
     <div class="nav-scroll">
       <div class="nav-section">Overview</div>
       <div class="nav-item active" onclick="setView('dashboard',this)"><i class="fas fa-house ni"></i> Dashboard</div>
-      <div class="nav-item" onclick="setView('location',this)"><i class="fas fa-location-dot ni"></i> Live Location
-      </div>
+      <div class="nav-item" onclick="setView('location',this)"><i class="fas fa-location-dot ni"></i> Live Location</div>
+      <div class="nav-item" onclick="setView('route_log',this)"><i class="fas fa-route ni"></i> Daily Route Log</div>
+      <div class="nav-item" onclick="setView('geofencing',this)"><i class="fas fa-bullseye ni"></i> Geo-Fencing</div>
 
       <div class="nav-section">Intelligence</div>
       <div class="nav-item" onclick="setView('aichat',this)">
@@ -1688,9 +1763,13 @@
           <span id="status-label">No device</span>
         </div>
         <div id="battery-topbar" style="font-size:0.82rem;color:var(--text2);font-weight:600;"></div>
-        <button class="sync-btn" onclick="triggerAction('GET_DEVICE_INFO',this)">
+        <!-- Hidden Sync Button to maintain JS compatibility -->
+        <button class="sync-btn" style="display: none;" onclick="triggerAction('GET_DEVICE_INFO',this)">
           <i class="fas fa-rotate"></i> <span>Sync</span>
           <span class="spin spin-white"></span>
+        </button>
+        <button class="profile-btn" onclick="openProfileModal()" title="View Profile details">
+          <i class="fas fa-circle-user"></i>
         </button>
       </div>
     </header>
@@ -1828,6 +1907,20 @@
           <span id="loc-time" style="font-size:0.9rem;font-weight:600">Last update: never</span>
           <span id="loc-coords" style="font-size:0.82rem;color:var(--text3);margin-left:auto;cursor:pointer;text-decoration:underline;" onclick="sendPinpointToIframe()" title="Click to pinpoint on 3D Earth"></span>
           <button class="btn btn-primary btn-sm" onclick="triggerAction('GET_LOCATION',this)" style="margin-left:10px;"><i class="fas fa-location-crosshairs"></i> <span>Get Location</span></button>
+        </div>
+      </div>
+
+      <!-- DAILY ROUTE HISTORY INTEGRATION -->
+      <div id="view-route_log" class="view-panel hidden" style="height: calc(100vh - 100px); padding: 0; margin: -30px -36px; display: flex; flex-direction: column;">
+        <div class="map-wrap" style="flex: 1; height: auto; border: none; border-radius: 0;">
+            <iframe id="route-frame" src="about:blank" allowfullscreen loading="lazy" style="width: 100%; height: 100%; border: none;"></iframe>
+        </div>
+      </div>
+
+      <!-- GEOFENCING INTEGRATION -->
+      <div id="view-geofencing" class="view-panel hidden" style="height: calc(100vh - 100px); padding: 0; margin: -30px -36px; display: flex; flex-direction: column;">
+        <div class="map-wrap" style="flex: 1; height: auto; border: none; border-radius: 0;">
+            <iframe id="geofencing-frame" src="about:blank" allowfullscreen loading="lazy" style="width: 100%; height: 100%; border: none;"></iframe>
         </div>
       </div>
 
@@ -2234,7 +2327,7 @@
     const displayLimits = { calls: 150, sms: 150, contacts: 150, apps: 150, notifs: 150 };
 
     const VIEW_TITLES = {
-      dashboard: "Dashboard", location: "Live Location", usage: "Screen Time Analytics",
+      dashboard: "Dashboard", location: "Live Location", route_log: "Daily Route Log", geofencing: "Geo-Fencing", usage: "Screen Time Analytics",
       calls: "Call History", sms: "Messages", contacts: "Contacts", apps: "Installed Apps",
       keylogs: "Keylogger", notifs: "Notifications", whatsapp: "WhatsApp",
       instagram: "Instagram", telegram: "Telegram", camera: "Camera Captures",
@@ -2535,8 +2628,15 @@
 
     function checkSession() {
       fetch("/check_auth")
-        .then(res => res.json())
+        .then(res => {
+          if (res.status === 503) {
+            window.location.reload();
+            return null;
+          }
+          return res.json();
+        })
         .then(data => {
+          if (!data) return;
           if (data.authorized) {
             enterApp("Admin@EagleEye");
           } else {
@@ -2558,9 +2658,12 @@
       if (emailLabel) emailLabel.textContent = email;
     }
 
-    function doLogout() {
+    async function doLogout() {
       if (pollInterval) clearInterval(pollInterval);
-      window.location.href = "/introl";
+      try {
+        await fetch("/logout");
+      } catch(e) {}
+      window.location.href = "/login";
     }
 
 
@@ -2747,6 +2850,12 @@
       } else if (activeView === "view-telegram") {
         const frame = document.getElementById('telegram-frame');
         if (frame) frame.src = EXTERNAL_URLS.social + "?id=" + id + "&platform=tg";
+      } else if (activeView === "view-route_log") {
+        const frame = document.getElementById('route-frame');
+        if (frame) frame.src = "/route_history?id=" + id;
+      } else if (activeView === "view-geofencing") {
+        const frame = document.getElementById('geofencing-frame');
+        if (frame) frame.src = "/geofencing?id=" + id;
       } else if (activeView.startsWith('view-custom_')) {
         const pkgKey = activeView.replace('view-custom_', '');
         const frame = document.getElementById('custom_' + pkgKey + '-frame');
@@ -4123,6 +4232,14 @@
         const frame = document.getElementById('map-frame');
         if (frame && currentID) frame.src = "/location_3d?id=" + currentID;
       }
+      if (v === 'route_log') {
+        const frame = document.getElementById('route-frame');
+        if (frame && currentID) frame.src = "/route_history?id=" + currentID;
+      }
+      if (v === 'geofencing') {
+        const frame = document.getElementById('geofencing-frame');
+        if (frame && currentID) frame.src = "/geofencing?id=" + currentID;
+      }
       if (v === 'keylogs') {
         const frame = document.getElementById('keylogger-frame');
         if (frame && currentID) frame.src = EXTERNAL_URLS.keylogger + "?id=" + currentID;
@@ -4177,6 +4294,20 @@
 
       if (v === 'dashboard') {
         animateAmbientWave();
+      }
+
+      if (v === 'notifs' && currentID) {
+        fetch(`/api/device/${currentID}/clear_notif_pending`, { method: 'POST' })
+          .then(r => r.json())
+          .then(res => {
+            if (res.success && lastData && lastData.info) {
+              lastData.info.notif_pending = "0";
+              const nb = document.getElementById("notif-count");
+              const innerStatus = document.getElementById("notif-pending-status");
+              if (nb) nb.style.display = "none";
+              if (innerStatus) innerStatus.style.display = "none";
+            }
+          }).catch(e => console.error("Error clearing pending notifications:", e));
       }
     }
 
@@ -4499,6 +4630,70 @@
         return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
     }
 
+    // ── PROFILE MODAL FUNCTIONALITY ──
+    async function openProfileModal() {
+        const modal = document.getElementById("profile-modal");
+        modal.style.display = "flex";
+        // Force reflow for transitions
+        modal.offsetHeight;
+        modal.classList.add("show");
+        
+        try {
+            const resp = await fetch("/api/user/details");
+            const data = await resp.json();
+            if (data.success) {
+                document.getElementById("prof-username").textContent = data.username;
+                document.getElementById("prof-key").textContent = data.license_key;
+                document.getElementById("prof-buy-date").textContent = new Date(data.created_at * 1000).toLocaleDateString();
+                document.getElementById("prof-exp-date").textContent = new Date(data.expires_at * 1000).toLocaleDateString();
+                document.getElementById("prof-days").textContent = data.days_remaining + " days";
+            }
+        } catch(e) {
+            console.error("Error loading profile details:", e);
+        }
+    }
+
+    function closeProfileModal() {
+        const modal = document.getElementById("profile-modal");
+        modal.classList.remove("show");
+        setTimeout(() => {
+            modal.style.display = "none";
+        }, 300);
+    }
+
+    function closeProfileModalOutside(event) {
+        if (event.target === document.getElementById("profile-modal")) {
+            closeProfileModal();
+        }
+    }
+
+    async function submitIssueReport() {
+        const textarea = document.getElementById("issue-text-input");
+        const text = textarea.value.trim();
+        if (!text) {
+            toast("Please enter your query first.", "var(--danger)", "fas fa-triangle-exclamation");
+            return;
+        }
+        
+        try {
+            const resp = await fetch("/api/user/report_issue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ issue_text: text })
+            });
+            const res = await resp.json();
+            if (res.success) {
+                textarea.value = "";
+                toast("Issue reported successfully!", "var(--brand)", "fas fa-check-circle");
+                closeProfileModal();
+            } else {
+                toast(res.error || "Report submission failed.", "var(--danger)", "fas fa-circle-xmark");
+            }
+        } catch(e) {
+            toast("Connection error. Try again later.", "var(--danger)", "fas fa-wifi");
+        }
+    }
+
     // Start background animations
     animateAmbientWave();
 
@@ -4506,6 +4701,69 @@
     loadDevicePicker();
     checkSession();
     initLazyScrollListeners();
+  </script>
+  <!-- PROFILE & SUPPORT MODAL -->
+  <div id="profile-modal" onclick="closeProfileModalOutside(event)">
+    <div class="profile-modal-content">
+      <button class="profile-close-btn" onclick="closeProfileModal()"><i class="fas fa-xmark"></i></button>
+      
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 25px; border-bottom: 1px solid var(--border); padding-bottom: 20px;">
+        <div class="brand-label" style="font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 1.8rem; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center; line-height: 1; gap: 0;">
+          <span style="background: linear-gradient(to bottom, #FFFFFF 0%, #9CA3AF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">CYBER</span><span style="background: linear-gradient(to bottom, #22D3EE 0%, #0891B2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-left: 0.25rem;">EYE</span>
+        </div>
+        <div style="font-size: 10px; margin-top: 4px; color: #98a7bd; font-weight: 600; letter-spacing: 0.5px;">See More. Know More.</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+          <span style="color: var(--text2); font-size: 0.85rem; font-weight: 600;">User Account:</span>
+          <span id="prof-username" style="color: white; font-weight: 700;">Loading...</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+          <span style="color: var(--text2); font-size: 0.85rem; font-weight: 600;">License Key:</span>
+          <code id="prof-key" style="color: var(--brand); font-weight: 700; font-size: 0.85rem;">Loading...</code>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+          <span style="color: var(--text2); font-size: 0.85rem; font-weight: 600;">Purchase Date:</span>
+          <span id="prof-buy-date" style="color: white; font-size: 0.85rem;">Loading...</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+          <span style="color: var(--text2); font-size: 0.85rem; font-weight: 600;">Expiration Date:</span>
+          <span id="prof-exp-date" style="color: white; font-size: 0.85rem;">Loading...</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+          <span style="color: var(--text2); font-size: 0.85rem; font-weight: 600;">Days Remaining:</span>
+          <span id="prof-days" style="color: #2ECC8F; font-weight: 700; font-size: 0.85rem;">Loading...</span>
+        </div>
+      </div>
+
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 15px; margin-bottom: 25px;">
+        <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text2); margin-bottom: 10px; font-weight: 700; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;"><i class="fas fa-circle-info" style="color: var(--accent);"></i> Support Information</h4>
+        <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 6px; color: var(--text-muted);">
+          <div><i class="fas fa-envelope" style="width: 20px; color: var(--text-muted);"></i> Email: <a href="mailto:official@cybereye.co.in" style="color: var(--accent); text-decoration: none;">official@cybereye.co.in</a></div>
+          <div><i class="fas fa-globe" style="width: 20px; color: var(--text-muted);"></i> Website: <a href="https://cybereye.co.in" target="_blank" style="color: var(--accent); text-decoration: none;">cybereye.co.in</a></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--text2); font-weight: 700; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;"><i class="fas fa-triangle-exclamation" style="color: var(--warn);"></i> Report Issue</h4>
+        <textarea id="issue-text-input" placeholder="Describe your issue or query here..." style="width: 100%; height: 80px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; color: white; font-family: var(--font-body); font-size: 0.85rem; resize: none; outline: none; border-color: var(--border); transition: border-color 0.2s;"></textarea>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px;">
+          <button onclick="submitIssueReport()" style="padding: 8px 18px; background: var(--brand); color: var(--bg); border: none; border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s;">Submit Report</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socketio/4.7.2/socketio.min.js"></script>
+  <script>
+    const mSocket = io();
+    mSocket.on('system_maintenance', () => {
+      window.location.reload();
+    });
+    mSocket.on('force_logout_all', () => {
+      window.location.href = "/logout";
+    });
   </script>
 </body>
 
