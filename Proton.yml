@@ -51,10 +51,9 @@ services:
     volumes:
       - ./gluetun:/gluetun
 
-  # CyberEye Monitoring Server (Flask + Socket.IO)
   monitoring-server:
     build:
-      context: ${APP_DIR:-./CYBER_EYE1}
+      context: ${APP_DIR:-./}
       dockerfile: Dockerfile
 
     container_name: proton-monitoring-server
@@ -78,14 +77,14 @@ services:
 
     volumes:
       # Logs, SMS, Calls, Contacts, Notifications
-      - ./website/data:/app/data
-      # Photos, Audio recordings, Screenshots, Live Camera, Screen Mirror (Flask saves to /app/media)
+      - ./website/data:/app/datawebsite
+      # Photos, Audio recordings, Screenshots, Live Camera, Screen  (Flask saves to /app/media)
       - ./website/uploads:/app/media
       # Device state registry database
-      - ${APP_DIR:-./CYBER_EYE1}/database.json:/app/database.json
+      - ${APP_DIR:-./}/database.json:/app/database.json
       # Gluetun port status file mount
       - ./gluetun:/gluetun:ro
       # Optional: Live source code mount for edits without rebuild
-      - ${APP_DIR:-./CYBER_EYE1}:/app
+      - ${APP_DIR:-./}:/app
       # Isolate container from host venv
       - /app/venv
