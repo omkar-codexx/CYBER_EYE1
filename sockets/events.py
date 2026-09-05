@@ -1,8 +1,9 @@
 import os
 import time
 import math
-from flask import request
+from flask import request, session
 from flask_socketio import emit, join_room
+from core.auth import has_device_access
 from core.database import (
     database, users_database, connected_devices, sid_to_device,
     connected_device_licenses, save_db, save_users_db
@@ -192,13 +193,40 @@ def register_socket_events(socketio):
 
     @socketio.on('join_device_room')
     def handle_join_device_room(data):
+        # --- PREVIOUS UNCHECKED IMPLEMENTATION (KEPT AS COMMENT) ---
+        # if isinstance(data, dict):
+        #     device_id = data.get('device_id')
+        # else:
+        #     device_id = data
+        # if device_id:
+        #     join_room(device_id)
+        #     print(f"[Socket.io] Dashboard joined room: {device_id}")
+        # -----------------------------------------------------------
+
+        # --- UPDATED SECURE RBAC CHECK ---
         if isinstance(data, dict):
             device_id = data.get('device_id')
         else:
             device_id = data
-        if device_id:
+
+        if not device_id:
+            return
+
+        username = session.get('username')
+        is_admin = session.get('admin_logged', False)
+
+        # Verify authorization: Only admins or users with explicit access to this device may join
+        if is_admin or has_device_access(username, device_id):
             join_room(device_id)
-            print(f"[Socket.io] Dashboard joined room: {device_id}")
+            print(f"[Socket.io] Dashboard joined room: {device_id} (User: {username})")
+        else:
+            print(f"[Socket.io] DENIED room join: {device_id} (User: {username}, IP: {request.remote_addr})")
+            emit('error_response', {
+                'error': 'Unauthorized: Access to this device stream is denied.',
+                'device_id': device_id
+            })
+        # ---------------------------------
+
 
     @socketio.on('camera_frame')
     def handle_camera_frame(data):

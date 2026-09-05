@@ -1,18 +1,36 @@
 services:
+  nginx:
+    image: nginx:alpine
+    container_name: proton-nginx
+    restart: unless-stopped
+    ports:
+      # Web Dashboard: Set WEB_BIND=127.0.0.1 in .env to bind admin exclusively to localhost
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8800}:8800"
+      # famX Hardware Gateway: Publicly accessible for remote field devices
+      - "${DEVICE_BIND:-0.0.0.0}:${DEVICE_PORT:-5000}:5000"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - cybereye-app
+    networks:
+      - proton-net
+
   cybereye-app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: cybereye-app
     restart: unless-stopped
-    ports:
-      - "${PORT:-5000}:5000"
+    expose:
+      - "8800"
+      - "5000"
     environment:
       PYTHONUNBUFFERED: "1"
-      PORT: "5000"
+      WEB_PORT: "8800"
+      DEVICE_PORT: "5000"
       HOST: "0.0.0.0"
       SECRET_KEY: "${SECRET_KEY:-cybereye-secret}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-AIzaSyBsHMZ1SrAaMXdXScPGbycCZokkD5B3tP0}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
       IP_PORT_CHECK_INTERVAL: "${IP_PORT_CHECK_INTERVAL:-30}"
@@ -24,3 +42,9 @@ services:
       - ./data:/app/data
       # Uploaded media, recordings, photos
       - ./media:/app/media
+    networks:
+      - proton-net
+
+networks:
+  proton-net:
+    driver: bridge

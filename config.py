@@ -11,3 +11,9 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', "AIzaSyBsHMZ1SrAaMXdXScPGbycCZ
 
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', "Admin@cybereye.co.in")
 ADMIN_DEFAULT_PASSWORD = os.environ.get('ADMIN_PASSWORD', "Cybereye@123")
+
+# Server Ports & Host (Configurable)
+WEB_PORT = int(os.environ.get('WEB_PORT', 8800))
+DEVICE_PORT = int(os.environ.get('DEVICE_PORT', 5000))
+HOST = os.environ.get('HOST', '0.0.0.0')
+

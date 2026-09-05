@@ -5,7 +5,7 @@ import random
 import string
 import requests
 from flask import Blueprint, request, jsonify, session, send_file
-from extensions import socketio
+from extensions import socketio, emit_device_command
 from config import GEMINI_API_KEY, BLACKLIST
 from core.database import database, users_database, connected_devices, save_db, save_users_db
 from core.auth import login_required, has_device_access
@@ -170,7 +170,7 @@ def api_monitored_apps(device_id):
             
             sid = connected_devices.get(device_id)
             if sid:
-                socketio.emit('command', {'action': f"MONITOR_APP:{package}"}, room=sid)
+                emit_device_command(device_id, {'action': f"MONITOR_APP:{package}"}, sid=sid)
             return jsonify({'success': True})
             
         elif action == 'remove':
@@ -180,7 +180,7 @@ def api_monitored_apps(device_id):
                 
                 sid = connected_devices.get(device_id)
                 if sid:
-                    socketio.emit('command', {'action': f"UNMONITOR_APP:{package}"}, room=sid)
+                    emit_device_command(device_id, {'action': f"UNMONITOR_APP:{package}"}, sid=sid)
                 return jsonify({'success': True})
             return jsonify({'success': False, 'error': 'App not found'}), 404
             
@@ -456,7 +456,7 @@ def api_device_action(device_id):
     sid = connected_devices.get(device_id)
     if sid:
         print(f"[Socket.io] Emitting Command: {cmd} to Device: {device_id} (sid: {sid})")
-        socketio.emit('command', {'action': cmd}, room=sid)
+        emit_device_command(device_id, {'action': cmd}, sid=sid)
         update_device_record(device_id, "logs", f"Sent command: {cmd}")
         return jsonify({'success': True})
     else:
