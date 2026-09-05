@@ -1191,27 +1191,11 @@
 
   </div>
 
-  <!-- Firebase SDK (Disabled) -->
-  <!-- <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script> -->
-
   <script>
     // Restore right-click inspect functionality
     window.addEventListener('contextmenu', (e) => {
       e.stopPropagation();
     }, true);
-
-    // Firebase Initialization (Disabled)
-    /*
-    const firebaseConfig = {
-      apiKey: "AIzaSyAHkYidYFElwq3Mt13t0jlpIlhw33DtVco",
-      databaseURL: "https://cyber-eye-ccb1e-default-rtdb.firebaseio.com",
-      projectId: "cyber-eye-ccb1e",
-      storageBucket: "cyber-eye-ccb1e.firebasestorage.app"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    */
 
     // Dynamic CDN Fallback Loader
     (async function init() {
@@ -2136,7 +2120,7 @@
         showToast(`Sending ${action}...`);
 
         try {
-          // Telegram Bot (Backend Backup) - Removed Firebase command trigger
+          // Telegram Bot (Backend Backup) - Native command dispatch
           await fetch(`/api/device/${targetId}/action`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

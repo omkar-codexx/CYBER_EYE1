@@ -1,4 +1,5 @@
 import time
+import json
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Text, Boolean, BigInteger, DateTime,
@@ -79,12 +80,17 @@ class Device(Base):
     def to_dict(self):
         info_val = self.info or {}
         if isinstance(info_val, str):
-            parsed_info = {}
-            for line in info_val.split('\n'):
-                if ':' in line:
-                    k, v = line.split(':', 1)
-                    parsed_info[k.strip().lower()] = v.strip()
-            info_val = parsed_info
+            try:
+                info_val = json.loads(info_val)
+            except Exception:
+                parsed_info = {}
+                for line in info_val.split('\n'):
+                    if ':' in line:
+                        k, v = line.split(':', 1)
+                        parsed_info[k.strip().lower()] = v.strip()
+                info_val = parsed_info
+        elif not isinstance(info_val, dict):
+            info_val = {}
 
         d = {
             "_id": self.device_id,
@@ -105,6 +111,8 @@ class Device(Base):
         }
         if self.extra_data and isinstance(self.extra_data, dict):
             d.update(self.extra_data)
+        if "previews" not in d or not isinstance(d["previews"], dict):
+            d["previews"] = {}
         return d
 
 class Report(Base):

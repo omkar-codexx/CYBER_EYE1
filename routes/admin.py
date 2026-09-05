@@ -6,7 +6,7 @@ from extensions import socketio
 from core.auth import admin_required, hash_password
 from core.database import (
     users_database, database, connected_devices,
-    connected_device_licenses, save_users_db
+    connected_device_licenses, is_device_online, save_users_db
 )
 
 admin_bp = Blueprint('admin', __name__)
@@ -27,7 +27,7 @@ def admin_list_users_keys():
         
         device_details = []
         for dev_id in u_info.get("devices", []):
-            is_online = dev_id in connected_devices
+            is_online = is_device_online(dev_id)
             is_hidden = dev_id in u_info.get("hidden_devices", [])
             model = database.get(dev_id, {}).get("info", {}).get("model", dev_id)
             device_details.append({

@@ -6,6 +6,7 @@
     <title>CYBEREYE — Live Audio Monitor</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         :root {
             --brand: #2b6cb0;
@@ -323,6 +324,38 @@
             });
         }
 
+        // Initialize Real-Time Socket.IO
+        const socket = io();
+
+        socket.on('connect', () => {
+            if (deviceID) {
+                socket.emit('join_device_room', { device_id: deviceID });
+            }
+        });
+
+        // 1. Push notification of newly ingested audio chunk (Zero Polling Lag)
+        socket.on('live_audio_chunk', (data) => {
+            if (!isStreaming) return;
+            if (data.device_id && data.device_id !== deviceID) return;
+            if (data.url) {
+                audioQueue.push(data.url);
+                if (!isPlaying) {
+                    playNext();
+                }
+            }
+        });
+
+        // 2. Direct binary audio chunk relay
+        socket.on('live_audio_relay', (data) => {
+            if (!isStreaming) return;
+            if (data.url) {
+                audioQueue.push(data.url);
+                if (!isPlaying) {
+                    playNext();
+                }
+            }
+        });
+
         function checkLiveAudio() {
             if(!deviceID || !isStreaming) return;
             fetch(`/api/device/${deviceID}/live_audio_status`)
@@ -338,7 +371,8 @@
                 })
                 .catch(e => console.error(e));
         }
-        setInterval(checkLiveAudio, 1000);
+        // Fallback polling
+        setInterval(checkLiveAudio, 2500);
 
         function toggleControls(disable) {
             document.getElementById('start-btn').disabled = disable;

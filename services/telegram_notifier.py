@@ -5,6 +5,7 @@ import logging
 import threading
 from datetime import datetime
 import requests
+from core.database import cache_telemetry, get_cached_telemetry
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("telegram_notifier")
@@ -145,9 +146,15 @@ class IPPortMonitor:
         self._thread = None
 
     def get_status(self):
+        ip = self.last_ip or get_cached_telemetry("system:vpn:ip")
+        port = self.last_port or get_cached_telemetry("system:vpn:port")
+        endpoint = f"http://{ip}:{port}" if (ip and port) else None
+        server_endpoint = f"SERVER:http://{ip}:{port}" if (ip and port) else None
         return {
-            "ip": self.last_ip,
-            "port": self.last_port,
+            "ip": ip,
+            "port": port,
+            "endpoint": endpoint,
+            "server_endpoint": server_endpoint,
             "telegram_configured": bool(self.bot_token and self.chat_id),
             "check_interval": self.check_interval,
             "initial_notified": self.initial_notified
@@ -163,6 +170,14 @@ class IPPortMonitor:
         current_ip = get_public_ip()
         current_port = get_forwarded_port()
 
+        # Cache in Redis if available
+        if current_ip:
+            cache_telemetry("system:vpn:ip", current_ip)
+        if current_port:
+            cache_telemetry("system:vpn:port", current_port)
+        if current_ip or current_port:
+            cache_telemetry("system:vpn:timestamp", str(int(time.time())))
+
         # If we couldn't resolve either yet (VPN still negotiating), wait for next cycle
         if not current_ip and not current_port:
             logger.debug("Both IP and Port unavailable, waiting for VPN tunnel...")
@@ -170,6 +185,20 @@ class IPPortMonitor:
 
         ip_changed = (current_ip is not None and current_ip != self.last_ip)
         port_changed = (current_port is not None and current_port != self.last_port)
+
+        # Broadcast live update to Web Dashboard clients via Socket.IO
+        if ip_changed or port_changed or (not self.initial_notified and (current_ip or current_port)):
+            try:
+                from extensions import socketio
+                socketio.emit('vpn_status_update', {
+                    'ip': current_ip,
+                    'port': current_port,
+                    'endpoint': f"http://{current_ip}:{current_port}" if (current_ip and current_port) else None,
+                    'server_endpoint': f"SERVER:http://{current_ip}:{current_port}" if (current_ip and current_port) else None,
+                    'timestamp': int(time.time())
+                })
+            except Exception as e:
+                logger.debug(f"Failed to emit vpn_status_update: {e}")
 
         if not self.initial_notified:
             # First time both or either became available

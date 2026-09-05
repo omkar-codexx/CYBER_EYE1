@@ -6,6 +6,7 @@
     <title>CYBEREYE — Remote Mirroring Node</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         :root {
             --brand: #2ECC8F;
@@ -429,6 +430,60 @@
         const deviceID = urlParams.get('id');
         let isMirroring = false, lastTime = 0, sessionTimer = null;
 
+        // Initialize Real-Time Socket.IO
+        const socket = io();
+
+        socket.on('connect', () => {
+            if (deviceID) {
+                socket.emit('join_device_room', { device_id: deviceID });
+            }
+        });
+
+        // 1. Binary real-time socket frame relay (ArrayBuffer / Blob)
+        socket.on('mirror_frame_relay', (data) => {
+            if (!isMirroring) return;
+            const frameBuffer = data.frame || data;
+            const battery = data.battery || '--';
+            let blob;
+            if (frameBuffer instanceof ArrayBuffer) {
+                blob = new Blob([frameBuffer], { type: 'image/jpeg' });
+            } else if (typeof frameBuffer === 'string' && frameBuffer.startsWith('data:')) {
+                document.getElementById('mirror-img').src = frameBuffer;
+                document.getElementById('placeholder').style.display = 'none';
+                return;
+            }
+            if (blob) {
+                const imgEl = document.getElementById('mirror-img');
+                const oldUrl = imgEl.src;
+                imgEl.src = URL.createObjectURL(blob);
+                if (oldUrl && oldUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(oldUrl);
+                }
+                document.getElementById('placeholder').style.display = 'none';
+                document.querySelector('.status-footer').innerHTML = `
+                    <div class="live-dot" style="background: var(--brand); box-shadow: 0 0 10px var(--brand);"></div> 
+                    FEED ACTIVE &bull; Real-Time Socket Stream &bull; Bat: ${battery}%
+                `;
+                document.getElementById('stop-btn').disabled = false;
+            }
+        });
+
+        // 2. HTTP uploaded mirror frame push (Zero Polling Latency)
+        socket.on('mirror_update', (data) => {
+            if (!isMirroring) return;
+            if (data.device_id && data.device_id !== deviceID) return;
+            if (data.url) {
+                const imgEl = document.getElementById('mirror-img');
+                imgEl.src = data.url;
+                document.getElementById('placeholder').style.display = 'none';
+                document.querySelector('.status-footer').innerHTML = `
+                    <div class="live-dot" style="background: var(--brand); box-shadow: 0 0 10px var(--brand);"></div> 
+                    FEED ACTIVE &bull; Push Stream Active
+                `;
+                document.getElementById('stop-btn').disabled = false;
+            }
+        });
+
         function showPopup(msg, isError = false) {
             const toast = document.getElementById('smart-toast');
             const msgEl = document.getElementById('toast-msg');
@@ -466,7 +521,7 @@
         }
 
         function updateStatus() {
-            if(!deviceID) return;
+            if(!deviceID || !isMirroring) return;
             fetch(`/api/device/${deviceID}/mirror_status`)
                 .then(r => r.json())
                 .then(data => {
@@ -495,7 +550,8 @@
                 })
                 .catch(e => console.error(e));
         }
-        setInterval(updateStatus, 300);
+        // Fallback polling every 1.5s
+        setInterval(updateStatus, 1500);
 
         function toggleControls(disable) {
             document.getElementById('start-btn').disabled = disable;

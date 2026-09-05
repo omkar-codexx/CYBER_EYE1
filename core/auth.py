@@ -68,5 +68,5 @@ def has_device_access(username, device_id):
     device_data = database.get(device_id, {})
     device_license = device_data.get("license_key")
     
-    # STRICT LICENSE MATCHING: Device must have a matching license key to be displayed
-    return (device_license in user_licenses)
+    # STRICT LICENSE MATCHING: Device must have a matching license key or be assigned to user with active license
+    return (device_license in user_licenses) or (device_id in user_data.get("devices", []) and len(user_licenses) > 0)

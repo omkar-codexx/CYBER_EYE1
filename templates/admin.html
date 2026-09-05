@@ -10,6 +10,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Orbitron:wght@700;900&display=swap"
     rel="stylesheet">
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <style>
     :root {
       --brand: #2ECC8F;
@@ -383,6 +384,129 @@
       backdrop-filter: blur(5px);
       transition: all 0.25s ease;
     }
+
+    /* Live VPN Public IP & Port Header Badge */
+    .vpn-badge-container {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: rgba(24, 28, 38, 0.95);
+      border: 1px solid rgba(34, 211, 238, 0.28);
+      border-radius: 12px;
+      padding: 8px 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), inset 0 0 15px rgba(34, 211, 238, 0.05);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .vpn-badge-container.vpn-updated {
+      border-color: #22D3EE;
+      box-shadow: 0 0 25px rgba(34, 211, 238, 0.45), inset 0 0 20px rgba(34, 211, 238, 0.2);
+      transform: scale(1.02);
+    }
+
+    .vpn-badge-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      padding-right: 12px;
+    }
+
+    .vpn-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 10px #10B981;
+      animation: vpnPulse 2s infinite ease-in-out;
+    }
+
+    .vpn-dot.waiting {
+      background: #F59E0B;
+      box-shadow: 0 0 10px #F59E0B;
+    }
+
+    .vpn-dot.error {
+      background: #EF4444;
+      box-shadow: 0 0 10px #EF4444;
+    }
+
+    @keyframes vpnPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.25); }
+    }
+
+    .vpn-status-text {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #10B981;
+    }
+
+    .vpn-badge-details {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .vpn-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.82rem;
+    }
+
+    .vpn-item i {
+      color: #22D3EE;
+      font-size: 0.85rem;
+    }
+
+    .vpn-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #6B7280;
+      letter-spacing: 0.5px;
+    }
+
+    .vpn-value {
+      font-family: 'JetBrains Mono', monospace, Consolas, sans-serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #F3F4F6;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      letter-spacing: 0.5px;
+    }
+
+    .vpn-divider {
+      width: 1px;
+      height: 18px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-vpn-copy {
+      background: rgba(34, 211, 238, 0.12);
+      border: 1px solid rgba(34, 211, 238, 0.35);
+      color: #22D3EE;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+
+    .btn-vpn-copy:hover {
+      background: #22D3EE;
+      color: #0F1117;
+      box-shadow: 0 0 12px rgba(34, 211, 238, 0.45);
+    }
   </style>
 </head>
 
@@ -395,6 +519,32 @@
       </div>
       <div style="font-size: 10px; margin-top: 4px; color: #98a7bd; font-weight: 600; letter-spacing: 0.5px;">See More. Know More.</div>
     </div>
+
+    <!-- Live VPN Public IP & Forwarded Port Widget -->
+    <div id="vpn-network-badge" class="vpn-badge-container">
+      <div class="vpn-badge-status">
+        <span id="vpn-dot" class="vpn-dot"></span>
+        <span id="vpn-status-text" class="vpn-status-text">TUNNEL ACTIVE</span>
+      </div>
+      <div class="vpn-badge-details">
+        <div class="vpn-item" title="Current Proton Public IP">
+          <i class="fas fa-globe"></i>
+          <span class="vpn-label">PUBLIC IP:</span>
+          <span id="vpn-ip-val" class="vpn-value">Detecting...</span>
+        </div>
+        <div class="vpn-divider"></div>
+        <div class="vpn-item" title="Gluetun NAT-PMP Forwarded Port">
+          <i class="fas fa-plug"></i>
+          <span class="vpn-label">PORT:</span>
+          <span id="vpn-port-val" class="vpn-value">Waiting...</span>
+        </div>
+        <button id="btn-copy-vpn" class="btn-vpn-copy" onclick="copyVpnEndpoint()" title="Click to copy full endpoint URL">
+          <i class="fas fa-copy"></i>
+          <span id="copy-btn-text">Copy</span>
+        </button>
+      </div>
+    </div>
+
     <button class="btn-logout" onclick="logoutAdmin()">Logout</button>
   </header>
 
@@ -1090,11 +1240,111 @@
       });
     }
 
+    // Live VPN IP & Forwarded Port Real-time Monitor
+    let activeVpnIp = null;
+    let activeVpnPort = null;
+
+    function updateVpnDisplay(data) {
+      if (!data) return;
+      const ip = data.ip;
+      const port = data.port;
+      
+      const badge = document.getElementById('vpn-network-badge');
+      const ipEl = document.getElementById('vpn-ip-val');
+      const portEl = document.getElementById('vpn-port-val');
+      const dot = document.getElementById('vpn-dot');
+      const statusText = document.getElementById('vpn-status-text');
+
+      if (!ipEl || !portEl) return;
+
+      const changed = (activeVpnIp !== null && activeVpnIp !== ip) || (activeVpnPort !== null && activeVpnPort !== port);
+
+      activeVpnIp = ip;
+      activeVpnPort = port;
+
+      if (ip) {
+        ipEl.innerText = ip;
+      } else {
+        ipEl.innerText = 'Detecting...';
+      }
+
+      if (port) {
+        portEl.innerText = port;
+      } else {
+        portEl.innerText = 'Waiting...';
+      }
+
+      if (ip && port) {
+        if (dot) dot.className = 'vpn-dot';
+        if (statusText) {
+          statusText.innerText = 'TUNNEL ACTIVE';
+          statusText.style.color = '#10B981';
+        }
+      } else {
+        if (dot) dot.className = 'vpn-dot waiting';
+        if (statusText) {
+          statusText.innerText = 'TUNNEL CONNECTING';
+          statusText.style.color = '#F59E0B';
+        }
+      }
+
+      if (changed && badge) {
+        badge.classList.add('vpn-updated');
+        setTimeout(() => badge.classList.remove('vpn-updated'), 1500);
+        showSmartToast(`VPN Connection Updated: IP=${ip || '---'}, Port=${port || '---'}`, 'info');
+      }
+    }
+
+    async function fetchVpnStatus() {
+      try {
+        const resp = await fetch('/api/network_status');
+        if (resp.ok) {
+          const data = await resp.json();
+          updateVpnDisplay(data);
+        }
+      } catch (e) {
+        console.error('Error fetching VPN status:', e);
+      }
+    }
+
+    function copyVpnEndpoint() {
+      if (!activeVpnIp || !activeVpnPort) {
+        showSmartToast('VPN Endpoint not fully resolved yet.', 'warning');
+        return;
+      }
+      const endpoint = `SERVER:http://${activeVpnIp}:${activeVpnPort}`;
+      navigator.clipboard.writeText(endpoint).then(() => {
+        const btnText = document.getElementById('copy-btn-text');
+        if (btnText) {
+          btnText.innerText = 'Copied!';
+          setTimeout(() => { btnText.innerText = 'Copy'; }, 2000);
+        }
+        showSmartToast(`Copied: ${endpoint}`, 'success');
+      }).catch(() => {
+        window.prompt('Copy endpoint:', endpoint);
+      });
+    }
+
+    // Socket.io real-time listener for instant push
+    if (typeof io !== 'undefined') {
+      try {
+        const adminSocket = io();
+        adminSocket.on('vpn_status_update', (data) => {
+          console.log('[Socket.io] Real-time VPN Status Update received:', data);
+          updateVpnDisplay(data);
+        });
+      } catch(e) {
+        console.warn('Socket.io connection in admin failed:', e);
+      }
+    }
+
     // Initial Load
     document.addEventListener("DOMContentLoaded", () => {
       loadUsersData();
       loadSupportQueries();
+      fetchVpnStatus();
       setInterval(loadSupportQueries, 30000);
+      setInterval(fetchVpnStatus, 15000);
     });
   </script>
 

