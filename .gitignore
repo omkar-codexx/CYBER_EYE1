@@ -1,12 +1,66 @@
-# Ignore data and media folders
+# ==============================================================================
+# Proton / CyberEye .gitignore
+# ==============================================================================
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+config.json
+
+# Local Data, Uploads, and VPN State
 data/
 media/
+gluetun/
+website/
 
-# Ignore local database and caches
+# Local Databases and SQLite Caches
 database.json
-__pycache__/
-*.pyc
+*.db
+*.sqlite
+*.sqlite3
 
-# Ignore OS-specific files
+# Python Bytecode, Compiles, and Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution & Packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs & Text Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating System Files
 .DS_Store
 Thumbs.db
+ehthumbs.db
