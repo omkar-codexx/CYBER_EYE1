@@ -3162,15 +3162,21 @@
       }
       lastMediaKeys = keys;
 
+      const isMirrorOrLive = (name) => {
+        const n = (name || "").toLowerCase();
+        return n.includes("mirror") || n.includes("mirro") || n.includes("mirrro") || n.includes("live_camera");
+      };
+
       let arr = [];
       if (Array.isArray(media)) {
-        arr = media;
+        arr = media.filter(m => !isMirrorOrLive(m?.name));
       } else if (typeof media === 'object' && media !== null) {
         Object.entries(media).forEach(([key, val]) => {
           if (!val) return;
           if (Array.isArray(val)) {
             val.forEach((item, idx) => {
               const fn = typeof item === 'string' ? item : (item.name || `file_${idx}`);
+              if (isMirrorOrLive(fn)) return;
               const mType = (key === 'voice' || fn.toLowerCase().startsWith('audio_')) ? 'audio' : (key === 'photos' ? 'image' : 'file');
               arr.push({
                 fbKey: `${key}_${idx}`,
@@ -3181,13 +3187,15 @@
               });
             });
           } else if (typeof val === 'object') {
-            arr.push({ ...val, fbKey: key });
+            if (!isMirrorOrLive(val.name)) {
+              arr.push({ ...val, fbKey: key });
+            }
           }
         });
       }
 
       arr = arr.filter(m => {
-          if (!m) return false;
+          if (!m || isMirrorOrLive(m.name)) return false;
           const dVal = String(m.duration || "");
           const dNum = parseFloat(dVal);
           const name = (m.name || "").toLowerCase();
@@ -3211,11 +3219,6 @@
       }
 
       // Strictly separate screenshots and camera photos (excluding mirror feeds, live camera frames, and webpage preview .dat maps)
-      const isMirrorOrLive = (name) => {
-        const n = (name || "").toLowerCase();
-        return n.includes("mirror") || n.includes("live_camera");
-      };
-
       const cameraMedia = arr.filter(m => m.type === "image" && 
                                           !isMirrorOrLive(m.name) &&
                                           !m.name?.toLowerCase().includes("screenshot") && 

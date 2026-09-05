@@ -402,6 +402,22 @@
             document.getElementById('stop-btn').disabled = false;
         });
 
+        // Listen for HTTP-uploaded live camera frames
+        socket.on('live_camera_update', (data) => {
+            if (!isMirroring) return;
+            if (data.device_id && data.device_id !== deviceID) return;
+            if (data.url) {
+                const imgEl = document.getElementById('mirror-img');
+                imgEl.src = data.url;
+                document.getElementById('placeholder').style.display = 'none';
+                document.querySelector('.status-footer').innerHTML = `
+                    <div class="live-dot" style="background: var(--brand); box-shadow: 0 0 10px var(--brand);"></div> 
+                    LIVE CAMERA ACTIVE &bull; Camera Stream Active
+                `;
+                document.getElementById('stop-btn').disabled = false;
+            }
+        });
+
         function toggleControls(disable) {
             document.getElementById('start-btn').disabled = disable;
             document.getElementById('camera-lens').disabled = disable;
