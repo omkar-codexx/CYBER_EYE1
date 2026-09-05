@@ -125,9 +125,6 @@ def build_notification_message(current_ip, current_port, event_type="update", ol
     if current_ip and current_port:
         msg_lines.append(f"🔗 <b>Endpoint:</b> <code>SERVER:http://{current_ip}:{current_port}</code>")
 
-    dashboard_port = os.environ.get("DASHBOARD_PORT", "8080")
-    msg_lines.append(f"🔒 <b>Dashboard:</b> <code>http://localhost:{dashboard_port}</code> (Local Only)")
-
     if change_info:
         msg_lines.extend(["", change_info])
 
@@ -254,3 +251,4 @@ def get_current_connection_status():
         "port": get_forwarded_port(),
         "telegram_configured": bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"))
     }
+
