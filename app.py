@@ -725,13 +725,21 @@ def introl_view():
     return render_template('introl.html')
 
 @app.route('/introl.mp4')
+@app.route('/static/intro/introl.mp4')
 def serve_intro_video():
-    return send_file('introl.mp4')
+    return send_file(os.path.join(app.root_path, 'static', 'intro', 'introl.mp4'))
 
 @app.route('/logo.png')
 @app.route('/static/logo.png')
+@app.route('/static/logo/logo.png')
 def serve_logo():
-    return send_file('logo.png')
+    return send_file(os.path.join(app.root_path, 'static', 'logo', 'logo.png'))
+
+@app.route('/logo1.png')
+@app.route('/static/logo1.png')
+@app.route('/static/logo/logo1.png')
+def serve_logo1():
+    return send_file(os.path.join(app.root_path, 'static', 'logo', 'logo1.png'))
 
 @app.route('/dashboard')
 @login_required
